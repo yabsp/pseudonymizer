@@ -1,0 +1,4 @@
+gliner==0.2.29
+sentencepiece==0.2.2
+protobuf==7.36.2
+presidio-analyzer==2.2.364

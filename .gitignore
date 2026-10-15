@@ -1,0 +1,9 @@
+# User settings
+settings.json
+
+# Local Python environment
+.venv/
+__pycache__/
+
+# other
+.claude

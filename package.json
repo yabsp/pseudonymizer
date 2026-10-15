@@ -1,0 +1,16 @@
+{
+  "name": "pseudonymizer",
+  "private": true,
+  "description": "Local pseudonymization of sensitive values before text is sent to an AI model",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node server",
+    "test": "node --test \"tests/**/*.test.mjs\"",
+    "test:strict": "STRICT_KNOWN_GAPS=1 node --test \"tests/**/*.test.mjs\"",
+    "test:model": "RUN_MODEL_TESTS=1 node --test tests/model/detection-eval.test.mjs",
+    "check": "for f in server/*.js $(find public/js -name '*.js'); do node --check \"$f\" || exit 1; done && python3 -m py_compile python/*.py"
+  }
+}

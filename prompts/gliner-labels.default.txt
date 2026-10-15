@@ -1,0 +1,50 @@
+# What GLiNER looks for. One entry per line:   label = CATEGORY
+#
+#   label     plain words for what to find, as you would explain it to a colleague,
+#             e.g. "date of birth" or "case number". GLiNER understands them in context.
+#   CATEGORY  the placeholder name in the prompt: PERSON gives [[PERSON_1]], [[PERSON_2]], ...
+#             Letters, digits and _. Several labels can share a category.
+#
+# To change the list, copy this file to gliner-labels.txt in the same folder and edit the copy;
+# gliner-labels.txt always wins. Prefer a few clear labels over many similar ones: GLiNER reads
+# all labels together with each part of the text. Lines starting with # are comments.
+# Only the GLiNER detector uses this file; the Ollama detector follows rules.md instead.
+
+# People
+person = PERSON
+username = PERSON
+
+# Organisations and projects
+organization = COMPANY
+company = COMPANY
+project name = PROJECT
+
+# Contact details
+email address = EMAIL
+phone number = PHONE
+address = ADDRESS
+
+# IT
+ip address = IP
+hostname = HOST
+url = URL
+
+# Secrets
+password = SECRET
+api key = SECRET
+access token = SECRET
+
+# Dates that identify a person
+date of birth = DATE
+
+# Numbers and identifiers
+iban = ID
+customer number = ID
+account number = ID
+social security number = ID
+passport number = ID
+license plate = ID
+case number = ID
+ticket number = ID
+medical record number = ID
+serial number = ID
