@@ -36,8 +36,8 @@ export function categorizePresidioEntities(entities, labels) {
 }
 
 /** GLiNER and Presidio together; language is "auto" or one of LANGUAGE_NAMES, and the one used is returned. */
-export async function detectWithPresidio(text, labels, { glinerModel, glinerThreshold, presidioLanguage }, signal) {
-  const { entities, language } = await callServer('api/detect/presidio', {
+export async function detectWithPresidio(text, labels, { glinerModel, glinerThreshold, presidioLanguage, accelerator }, signal) {
+  const { entities, language, runtime } = await callServer('api/detect/presidio', {
     method: 'POST',
     signal,
     body: {
@@ -46,7 +46,8 @@ export async function detectWithPresidio(text, labels, { glinerModel, glinerThre
       threshold: Number(glinerThreshold) || 0.4,
       model: glinerModel.trim() || DEFAULT_GLINER_MODEL,
       language: presidioLanguage || 'auto',
+      accelerator: accelerator || 'auto',
     },
   });
-  return { entities: categorizePresidioEntities(entities, labels), language };
+  return { entities: categorizePresidioEntities(entities, labels), language, runtime };
 }

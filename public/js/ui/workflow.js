@@ -219,7 +219,8 @@ export function refresh() {
 async function openDocument(file, { formulas = false } = {}) {
   const title = formulas ? 'Converting formulas' : 'Opening ' + file.name;
   try {
-    const { text, document, source } = await whileBusy(title, (signal, progress) => importDocument(file, { signal, progress, formulas }));
+    const { accelerator } = readSettings();
+    const { text, document, source } = await whileBusy(title, (signal, progress) => importDocument(file, { signal, progress, formulas, accelerator }));
     state.source = source;
     if (document) {
       state.document = { file, markdown: text, ...document };

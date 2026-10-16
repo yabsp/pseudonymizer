@@ -28,11 +28,11 @@ describe('opening documents', () => {
     assert.deepEqual(document, { pages: 1, images: 1, formulas: 0, formulasConverted: false, tables: 0 });
     assert.deepEqual(source, { name: 'Austrittsbericht.pdf', format: 'PDF' });
     assert.equal(requests.length, 1);
-    assert.equal(requests[0].url, 'api/extract/pdf');
+    assert.equal(requests[0].url, 'api/extract/pdf?accelerator=auto');
     assert.equal(requests[0].options.headers['Content-Type'], 'application/pdf');
     assert.equal(requests[0].options.body, pdf);
-    await importDocument(pdf, { formulas: true });
-    assert.equal(requests[1].url, 'api/extract/pdf?formulas=1');
+    await importDocument(pdf, { formulas: true, accelerator: 'torch-cuda' });
+    assert.equal(requests[1].url, 'api/extract/pdf?accelerator=torch-cuda&formulas=1');
   });
 
   it('refuses PDFs over 50 MB without uploading them', async (t) => {

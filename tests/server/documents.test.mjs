@@ -30,10 +30,17 @@ describe('PDF extraction endpoint', { skip: IS_WINDOWS && 'the fake reader is st
     const res = await upload(pdf('Hans Muster'));
     assert.equal(res.status, 200, res.body);
     assert.deepEqual(res.json(), {
-      markdown: '## Befund\n\nPatient Hans Muster\n\n[Formula 1, page 1: not converted]\n', pages: 1, images: 0, formulas: 1, formulasConverted: false, tables: 0,
+      markdown: '## Befund\n\nPatient Hans Muster\n\n[Formula 1, page 1: not converted]\n', pages: 1, images: 0, formulas: 1, formulasConverted: false, tables: 0, device: 'chosen auto',
     });
     const [file] = usedFiles().slice(-1);
     assert.ok(!fs.existsSync(file) && !fs.existsSync(path.dirname(file)), 'temporary folder deleted');
+  });
+
+  it('passes the hardware choice to the reader, and refuses unknown ones', async () => {
+    assert.equal((await upload(pdf('x'), { query: '?accelerator=torch-cuda' })).json().device, 'chosen torch-cuda');
+    for (const choice of ['cuda', 'torch-cuda;rm', '--formulas', 'onnx-azure']) {
+      assert.equal((await upload(pdf('x'), { query: '?accelerator=' + encodeURIComponent(choice) })).status, 400, choice);
+    }
   });
 
   it('converts formulas only when asked', async () => {

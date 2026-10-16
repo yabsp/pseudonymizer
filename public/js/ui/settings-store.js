@@ -1,7 +1,7 @@
 import { callServer } from '../server-api.js';
 import { $, setStatus } from './dom.js';
 
-const SETTING_FIELDS = ['detector', 'glinerModel', 'glinerThreshold', 'presidioLanguage', 'ollamaUrl', 'ollamaModel', 'cliAdapter', 'model'];
+const SETTING_FIELDS = ['detector', 'glinerModel', 'glinerThreshold', 'presidioLanguage', 'accelerator', 'ollamaUrl', 'ollamaModel', 'cliAdapter', 'model'];
 const BROWSER_COPY_KEY = 'pseudo-settings';
 const SAVE_DELAY_MS = 400;
 

@@ -212,10 +212,19 @@
               <option value="en">English</option>
             </select>
           </label>
-          <p class="hint">Presidio adds a second name finder (spaCy) and checks for phone, card and bank numbers. It needs a language model per language, see README.</p>
+          <p class="hint">Presidio adds a second name finder (spaCy) and checks for phone, card and bank numbers. It needs a language model per language, see docs/setup.md.</p>
         </div>
         <div data-detector="gliner presidio">
           <label class="field">GLiNER model <input id="glinerModel" value="urchade/gliner_multi_pii-v1"></label>
+          <label class="field">Hardware
+            <select id="accelerator"><option value="auto" selected>Automatic (recommended)</option></select>
+          </label>
+          <p class="hint">Automatic uses a GPU if this computer has a usable one, otherwise the CPU. A GPU is only used after it found the same values as the CPU on a test text. PDF documents use the same hardware where possible.</p>
+          <p id="hardwareStatus" class="status field" role="status"></p>
+          <details class="more">
+            <summary>This computer</summary>
+            <div id="hardwareInfo" class="hardware-info"><p>Checking the hardware…</p></div>
+          </details>
         </div>
         <div data-detector="ollama">
           <label class="field">Ollama URL <input id="ollamaUrl" value="http://localhost:11434"></label>

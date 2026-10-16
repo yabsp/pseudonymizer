@@ -1,4 +1,4 @@
-import { detectWithGliner } from './gliner.js';
+import { describeRuntime, detectWithGliner } from './gliner.js';
 import { parseGlinerLabels } from './gliner-labels.js';
 import { detectWithOllama } from './ollama.js';
 import { detectWithPresidio, LANGUAGE_NAMES } from './presidio.js';
@@ -18,7 +18,8 @@ export const DETECTORS = {
     async run(text, { settings, prompts, signal, progress }) {
       const labels = readGlinerLabels(prompts);
       progress('GLiNER, on this machine.');
-      return { entities: await detectWithGliner(text, labels, settings, signal), failed: 0, parts: 1 };
+      const { entities, runtime } = await detectWithGliner(text, labels, settings, signal);
+      return { entities, failed: 0, parts: 1, note: describeRuntime(runtime) };
     },
     failureHint: '',
   },
@@ -27,9 +28,9 @@ export const DETECTORS = {
     async run(text, { settings, prompts, signal, progress }) {
       const labels = readGlinerLabels(prompts);
       progress('GLiNER and Presidio, on this machine.');
-      const { entities, language } = await detectWithPresidio(text, labels, settings, signal);
+      const { entities, language, runtime } = await detectWithPresidio(text, labels, settings, signal);
       const how = settings.presidioLanguage === 'auto' ? 'recognized automatically' : 'as set in Settings';
-      return { entities, failed: 0, parts: 1, note: `Language: ${LANGUAGE_NAMES[language]}, ${how}.` };
+      return { entities, failed: 0, parts: 1, note: `Language: ${LANGUAGE_NAMES[language]}, ${how}. ${describeRuntime(runtime)}`.trim() };
     },
     failureHint: '',
   },

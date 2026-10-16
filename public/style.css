@@ -248,6 +248,13 @@ td.del button { padding: 2px 9px; }
 .message-part textarea { margin-top: 0; }
 .hint.after { margin: 12px 0 0; }
 
+/* Settings: this computer's hardware */
+.hardware-info { font-size: 0.86rem; color: var(--muted); }
+.hardware-info p { margin: 0 0 6px; overflow-wrap: anywhere; }
+.hardware-list { margin: 8px 0 0; padding-left: 18px; }
+.hardware-list li { margin-bottom: 4px; }
+.hardware-list li.usable strong { color: var(--ink); }
+
 /* Outputs */
 .output {
   margin: 0; min-height: 3em; max-height: 480px; overflow: auto; padding: 14px;

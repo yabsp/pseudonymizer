@@ -3,25 +3,28 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { DOCUMENT_COMMAND, DOCUMENT_FORMATS, DOCUMENT_TIMEOUT_MS, MAX_PDF_BYTES } from './config.js';
+import { ACCELERATOR } from './gliner.js';
 import { BodyTooLargeError, readBytes, rejectUnlessFromApp, send } from './http.js';
 
 // Every PDF file starts with "%PDF-".
 const PDF_SIGNATURE = '%PDF-';
 const RESULT_COUNTS = ['pages', 'images', 'formulas', 'tables'];
 
-const isResult = (r) => r && typeof r.markdown === 'string' && typeof r.formulasConverted === 'boolean'
+const isResult = (r) => r && typeof r.markdown === 'string' && typeof r.formulasConverted === 'boolean' && typeof r.device === 'string'
   && RESULT_COUNTS.every((key) => Number.isInteger(r[key]) && r[key] >= 0);
+// Only these fields go to the page; anything else the reader prints is dropped.
+const pickResult = ({ markdown, pages, images, formulas, formulasConverted, tables, device }) => ({ markdown, pages, images, formulas, formulasConverted, tables, device });
 
 /**
  * Extracts the PDF in a separate process. The file is written to a private temporary folder that is deleted
  * afterwards in every case; nothing of it is kept or logged.
  */
-function extractPdf(bytes, { formulas }, signal) {
+function extractPdf(bytes, { formulas, accelerator }, signal) {
   return new Promise((resolve, reject) => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pseudo-doc-'));
     const file = path.join(dir, 'document.pdf');
     fs.writeFileSync(file, bytes, { mode: 0o600 });
-    const args = [...DOCUMENT_COMMAND.args, file, ...(formulas ? ['--formulas'] : [])];
+    const args = [...DOCUMENT_COMMAND.args, file, '--accelerator', accelerator, ...(formulas ? ['--formulas'] : [])];
     const child = spawn(DOCUMENT_COMMAND.command, args, { cwd: DOCUMENT_COMMAND.cwd });
     let out = '';
     let recentErrors = '';
@@ -48,7 +51,7 @@ function extractPdf(bytes, { formulas }, signal) {
       }
       if (answer.error) return reject(new Error(answer.error));
       if (!isResult(answer)) return reject(new Error('The document reader returned an unexpected answer.'));
-      resolve(answer);
+      resolve(pickResult(answer));
     });
   });
 }
@@ -68,13 +71,16 @@ export async function handleExtractPdf(req, res) {
   if (bytes.subarray(0, PDF_SIGNATURE.length).toString('latin1') !== PDF_SIGNATURE) {
     return send(res, 415, { error: 'This file is not a PDF.' });
   }
-  const formulas = new URL(req.url, 'http://x').searchParams.get('formulas') === '1';
+  const query = new URL(req.url, 'http://x').searchParams;
+  const formulas = query.get('formulas') === '1';
+  const accelerator = query.get('accelerator') || 'auto';
+  if (!ACCELERATOR.test(accelerator)) return send(res, 400, { error: 'Invalid hardware choice.' });
   const cancelOnDisconnect = new AbortController();
   res.on('close', () => {
     if (!res.writableFinished) cancelOnDisconnect.abort();
   });
   try {
-    send(res, 200, await extractPdf(bytes, { formulas }, cancelOnDisconnect.signal));
+    send(res, 200, await extractPdf(bytes, { formulas, accelerator }, cancelOnDisconnect.signal));
   } catch (e) {
     if (!cancelOnDisconnect.signal.aborted) send(res, 502, { error: e.message });
   }

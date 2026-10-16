@@ -11,12 +11,13 @@ const MAX_PDF_BYTES = 50 * 1024 * 1024;
 export const PDF_IMPORTER = {
   label: 'PDF',
   extensions: ['pdf'],
-  async read(file, { signal, progress = () => {}, formulas = false } = {}) {
+  async read(file, { signal, progress = () => {}, formulas = false, accelerator = 'auto' } = {}) {
     if (file.size > MAX_PDF_BYTES) throw new Error(`"${file.name}" is larger than 50 MB. Split it into smaller parts.`);
     progress(formulas
       ? 'Converting formulas on this machine. This takes about a minute per formula.'
       : 'Reading text, tables and images on this machine. Scanned pages take longer.');
-    const result = await callServer('api/extract/pdf' + (formulas ? '?formulas=1' : ''), {
+    const query = new URLSearchParams({ accelerator, ...(formulas ? { formulas: '1' } : {}) });
+    const result = await callServer(`api/extract/pdf?${query}`, {
       method: 'POST', body: file, contentType: 'application/pdf', signal,
     });
     const { markdown, ...facts } = result;

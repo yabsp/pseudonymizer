@@ -89,6 +89,14 @@ open new windows, gets no permissions, and every request that doesn't go to this
 The installer carries the app code in `app.asar`, the helper built by PyInstaller in `resources/helper` and
 the model in `resources/models`. See `docs/adr/0003-desktop-app-electron.md`.
 
+## Hardware
+`python/accelerators.py` probes the machine (operating system, processor, memory, graphics adapters through
+`/sys`/`lspci`, PowerShell, `system_profiler` or `nvidia-smi`) and the back ends the installed packages offer:
+PyTorch on CPU, CUDA, XPU or MPS, and ONNX Runtime with CPU, CUDA, DirectML or CoreML. "auto" takes the first
+usable GPU. Before a back end other than PyTorch on the CPU is used, it runs a synthetic test text and must find
+the same values as the CPU; if not, the CPU is used and the answer's `runtime.notice` says why. The setting
+`accelerator` travels with every detection request and PDF extraction (Docling gets the matching device).
+
 ## Configuration as data
 - `config/adapters.json`: the CLIs, their arguments, how the prompt is passed, login hints and models.
 - `prompts/`: instructions, GLiNER labels and the never-sensitive word list; `<name>.<ext>` overrides

@@ -8,7 +8,7 @@ try:
     from gliner import GLiNER
     IMPORT_ERROR = None
 except ImportError as e:
-    IMPORT_ERROR = f'Python package "gliner" is not installed ({e}). See README, section "Detection with GLiNER".'
+    IMPORT_ERROR = f'Python package "gliner" is not installed ({e}). See docs/setup.md, section "Detection with GLiNER".'
 
 # A word as GLiNER counts it, so "a,b@c.d" is 7 words:
 #   \w+(?:[-_]\w+)*  letters/digits/"_", possibly joined by "-" or "_" ("2021-03-15", "Jean-Luc")
@@ -23,14 +23,41 @@ UNDERSCORE_IN_WORD = re.compile(r'(?<=[^\W_])_(?=[^\W_])')
 WINDOW_WORDS = 150
 OVERLAP_WORDS = 40
 
-loaded_models = {}
+import accelerators
+
+# The one model kept in memory: key (model name, requested hardware), and runtime, which says where it runs.
+loaded = {'key': None, 'model': None, 'runtime': None}
 
 
-def get_model(name):
-    if name not in loaded_models:
-        loaded_models.clear()
-        loaded_models[name] = GLiNER.from_pretrained(name)
-    return loaded_models[name]
+def load_checked(name, requested):
+    """The model on the requested hardware, checked against the CPU. If the hardware can't be used, fails the
+    check or fails to load, the CPU is used and runtime['notice'] says why, so the user sees it."""
+    backend = accelerators.resolve(requested)
+    runtime = {'id': backend, 'label': accelerators.LABELS[backend]}
+    if backend == 'torch-cpu':
+        return accelerators.load_gliner(name, backend), runtime
+    try:
+        model = accelerators.load_gliner(name, backend)
+        same, _reference, _found = accelerators.verify(model, name)
+    except Exception as e:  # reported below, as the reason for using the CPU
+        same, problem = False, f'could not be used ({type(e).__name__}: {e})'
+    else:
+        problem = 'found different values than the CPU on a test text'
+    if same:
+        return model, {**runtime, 'verified': True}
+    model = None
+    cpu = {'id': 'torch-cpu', 'label': accelerators.LABELS['torch-cpu'],
+           'notice': f'{runtime["label"]} {problem}, so detection runs on the CPU.'}
+    return accelerators.load_gliner(name, 'torch-cpu'), cpu
+
+
+def get_model(name, requested='auto'):
+    key = (name, requested)
+    if loaded['key'] != key:
+        loaded.update(key=None, model=None, runtime=None)  # free the old model before loading the next
+        model, runtime = load_checked(name, requested)
+        loaded.update(key=key, model=model, runtime=runtime)
+    return loaded['model']
 
 
 def predict(model, text, labels, threshold):
@@ -56,7 +83,7 @@ def windows(text):
 
 
 def detect_with_gliner(text, request):
-    model = get_model(request['model'])
+    model = get_model(request['model'], request.get('accelerator', 'auto'))
     best_by_span = {}
 
     def read(reading, start, end):
@@ -88,12 +115,13 @@ def detect(request):
     if IMPORT_ERROR:
         raise RuntimeError(IMPORT_ERROR)
     entities = detect_with_gliner(text, request)
+    runtime = loaded['runtime']
     if engine == 'gliner' or not text.strip():
-        return {'entities': entities}
+        return {'entities': entities, 'runtime': runtime}
     # imported only here, so GLiNER alone works without Presidio installed and starts faster
     from presidio_detection import detect_with_presidio
     language, found = detect_with_presidio(text, request.get('language', 'auto'), request.get('threshold', 0.4))
-    return {'entities': entities + found, 'language': language}
+    return {'entities': entities + found, 'language': language, 'runtime': runtime}
 
 
 def answer(line):
@@ -101,6 +129,8 @@ def answer(line):
     try:
         request = json.loads(line)
         request_id = request.get('id')
+        if request.get('probe'):
+            return {'id': request_id, **accelerators.probe()}
         return {'id': request_id, **detect(request)}
     except Exception as e:
         return {'id': request_id, 'error': f'{type(e).__name__}: {e}'}

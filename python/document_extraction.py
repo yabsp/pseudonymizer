@@ -2,7 +2,8 @@
 """The only place that uses Docling: turns a PDF into Markdown with headings, tables, formulas as LaTeX, numbered
 page breaks and a marker for every image. Images themselves are never part of the result.
 
-Run as: document_extraction.py <file.pdf> [--formulas]. Answers with one JSON object on stdout:
+Run as: document_extraction.py <file.pdf> [--accelerator ID] [--formulas], with ID as in accelerators.py (default
+auto). Answers with one JSON object on stdout:
 {"markdown", "pages", "images", "formulas", "formulasConverted", "tables"} or {"error"}; everything else goes to
 stderr. Formulas become LaTeX only with --formulas (about a minute per formula on a CPU), otherwise a marker."""
 import itertools
@@ -11,14 +12,17 @@ import os
 import re
 import sys
 
+import accelerators
+
 try:
+    from docling.datamodel.accelerator_options import AcceleratorOptions
     from docling.datamodel.base_models import InputFormat
     from docling.datamodel.pipeline_options import PdfPipelineOptions, RapidOcrOptions
     from docling.document_converter import DocumentConverter, PdfFormatOption
     from docling_core.types.doc import DocItemLabel, PictureItem, TableItem
     IMPORT_ERROR = None
 except ImportError as e:
-    IMPORT_ERROR = f'Python package "docling" is not installed ({e}). See README, section "Opening PDF documents".'
+    IMPORT_ERROR = f'Python package "docling" is not installed ({e}). See docs/setup.md, section "Opening PDF documents".'
 
 # Docling's model folder; the desktop app points DOCLING_ARTIFACTS_PATH at the models it ships.
 DEFAULT_ARTIFACTS = os.path.join(os.path.expanduser('~'), '.cache', 'docling', 'models')
@@ -30,8 +34,9 @@ FORMULA_NOT_CONVERTED = '<!-- formula-not-decoded -->'
 MAX_SECONDS = 600
 
 
-def build_converter(artifacts_path, formulas):
+def build_converter(artifacts_path, formulas, device):
     options = PdfPipelineOptions(
+        accelerator_options=AcceleratorOptions(device=device),
         artifacts_path=artifacts_path,
         enable_remote_services=False,
         allow_external_plugins=False,
@@ -72,8 +77,8 @@ def number_markers(markdown, image_pages, formula_pages, page_count):
     return re.sub(re.escape(PAGE_MARK), lambda _m: f'\n\n--- Page {next(page_numbers)} ---\n\n', markdown)
 
 
-def extract(path, artifacts_path, formulas):
-    result = build_converter(artifacts_path, formulas).convert(path)
+def extract(path, artifacts_path, formulas, device):
+    result = build_converter(artifacts_path, formulas, device).convert(path)
     document = result.document
     image_pages = pages_of(document, lambda item: isinstance(item, PictureItem))
     formula_pages = pages_of(document, lambda item: getattr(item, 'label', None) == DocItemLabel.FORMULA)
@@ -96,16 +101,32 @@ def extract(path, artifacts_path, formulas):
     }
 
 
+def parse_args(args):
+    options = {'accelerator': 'auto', 'formulas': False}
+    files = []
+    rest = iter(args)
+    for arg in rest:
+        if arg == '--formulas':
+            options['formulas'] = True
+        elif arg == '--accelerator':
+            options['accelerator'] = next(rest, 'auto')
+        else:
+            files.append(arg)
+    if len(files) != 1:
+        raise ValueError('expected one PDF file, optionally --accelerator ID and --formulas')
+    return options, files
+
+
 def main(args):
     answers = sys.stdout
     sys.stdout = sys.stderr  # libraries that print must not mix into the answer
     try:
         if IMPORT_ERROR:
             raise RuntimeError(IMPORT_ERROR)
-        files = [a for a in args if a != '--formulas']
-        if len(files) != 1:
-            raise ValueError('expected one PDF file and optionally --formulas')
-        answer = extract(files[0], os.environ.get('DOCLING_ARTIFACTS_PATH', DEFAULT_ARTIFACTS), '--formulas' in args)
+        options, files = parse_args(args)
+        device = accelerators.docling_device(accelerators.resolve(options['accelerator']))
+        answer = extract(files[0], os.environ.get('DOCLING_ARTIFACTS_PATH', DEFAULT_ARTIFACTS), options['formulas'], device)
+        answer['device'] = device
     except Exception as e:
         answer = {'error': f'{type(e).__name__}: {e}'}
     answers.write(json.dumps(answer) + '\n')

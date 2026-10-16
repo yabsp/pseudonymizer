@@ -3,7 +3,7 @@ import { getAbout } from './about.js';
 import { handleCli, listAdapters } from './cli.js';
 import { PORT } from './config.js';
 import { handleExtractPdf } from './documents.js';
-import { handleGliner, handlePresidio } from './gliner.js';
+import { handleGliner, handleHardware, handlePresidio } from './gliner.js';
 import { isAllowedHost, send } from './http.js';
 import { getSettings, saveSettings } from './settings.js';
 import { serveStatic } from './static.js';
@@ -16,6 +16,7 @@ const ROUTES = [
   { method: 'POST', path: '/api/detect/gliner', handler: handleGliner },
   { method: 'POST', path: '/api/detect/presidio', handler: handlePresidio },
   { method: 'POST', path: '/api/extract/pdf', handler: handleExtractPdf },
+  { method: 'POST', path: '/api/hardware', handler: handleHardware },
   // /api/cli/<adapter id>, the id made of letters, digits, "_" or "-"; the id is passed to the handler
   { method: 'POST', path: /^\/api\/cli\/([\w-]+)$/, handler: handleCli },
 ];

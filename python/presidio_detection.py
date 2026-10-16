@@ -7,7 +7,7 @@ try:
     from presidio_analyzer.nlp_engine import NlpEngineProvider
     IMPORT_ERROR = None
 except ImportError as e:
-    IMPORT_ERROR = f'Python package "presidio-analyzer" is not installed ({e}). See README, section "Detection with Presidio".'
+    IMPORT_ERROR = f'Python package "presidio-analyzer" is not installed ({e}). See docs/setup.md, section "Detection with Presidio".'
 
 SPACY_MODELS = {'de': 'de_core_news_lg', 'fr': 'fr_core_news_lg', 'it': 'it_core_news_lg', 'en': 'en_core_web_lg'}
 LANGUAGE_NAMES = {'de': 'German', 'fr': 'French', 'it': 'Italian', 'en': 'English'}
@@ -51,7 +51,7 @@ def get_analyzer(language):
         model = SPACY_MODELS[language]
         # Presidio would download a missing model from the internet; the user installs it instead.
         if not spacy.util.is_package(model):
-            raise RuntimeError(f'The spaCy model for {LANGUAGE_NAMES[language]} ({model}) is not installed. See README, section "Detection with Presidio".')
+            raise RuntimeError(f'The spaCy model for {LANGUAGE_NAMES[language]} ({model}) is not installed. See docs/setup.md, section "Detection with Presidio".')
         nlp_engine = NlpEngineProvider(nlp_configuration={
             'nlp_engine_name': 'spacy', 'models': [{'lang_code': language, 'model_name': model}],
         }).create_engine()

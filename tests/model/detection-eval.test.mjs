@@ -11,9 +11,12 @@ import { DOCUMENTS } from '../fixtures/documents.mjs';
 
 const PYTHON = path.join(ROOT, '.venv', 'bin', 'python');
 const SKIP = !process.env.RUN_MODEL_TESTS ? 'set RUN_MODEL_TESTS=1 to run the real model'
-  : !fs.existsSync(PYTHON) ? 'GLiNER is not installed in .venv (see README)' : false;
+  : !fs.existsSync(PYTHON) ? 'GLiNER is not installed in .venv (see docs/setup.md)' : false;
 const MODEL = 'urchade/gliner_multi_pii-v1';
 const THRESHOLD = 0.4; // "Balanced", the app's default
+// DETECTION_ACCELERATOR=onnx-cpu (or torch-cuda, onnx-directml, ...) runs the same baseline on other hardware, which
+// must find the same values; default "auto".
+const ACCELERATOR = process.env.DETECTION_ACCELERATOR || 'auto';
 
 // Measured baselines per detector, reported as TODO: values still visible, and mustKeep text that was changed.
 const DETECTORS = {
@@ -66,7 +69,7 @@ for (const [detector, { path: apiPath, knownMisses, knownChanges }] of Object.en
       server = await startServer({ env: { GLINER_PYTHON: PYTHON } });
       for (const doc of DOCUMENTS) {
         const started = Date.now();
-        const res = await server.api('POST', apiPath, { text: doc.text, labels: Object.keys(GLINER_LABELS), threshold: THRESHOLD, model: MODEL, language: 'auto' });
+        const res = await server.api('POST', apiPath, { text: doc.text, labels: Object.keys(GLINER_LABELS), threshold: THRESHOLD, model: MODEL, language: 'auto', accelerator: ACCELERATOR });
         assert.equal(res.status, 200, res.body);
         const { entities, language } = res.json();
         const pseudo = pseudonymizeAsTheApp(doc, categorizePresidioEntities(entities, GLINER_LABELS));

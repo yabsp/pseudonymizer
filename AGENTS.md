@@ -27,7 +27,7 @@ commands:
   run:         npm start                # http://localhost:8091, change with PORT=...
   desktop:     npm run desktop          # the desktop app from the project folder (needs npm install)
   dist:        npm run dist:linux       # AppImage in dist/; dist:win on Windows (helper via PyInstaller, model bundled)
-  setup:       see README, section "Detection with GLiNER"
+  setup:       docs/setup.md (for people); technical details in agents/reference.md
   check:       npm run check            # syntax of every JS file and the Python helper
   test:        npm test                 # fast suite with fakes, about 1 s
   test_strict: npm run test:strict      # known gaps fail instead of TODO
@@ -126,7 +126,8 @@ public/                   # Served to the browser (the only static root, plus pr
 server/                   # index.js (route table, listen), config.js (env and paths), http.js,
                           # static.js, settings.js, cli.js (CLI bridge), gliner.js (GLiNER bridge),
                           # documents.js (PDF extraction), about.js
-python/                   # gliner_helper.py (long-lived, JSON lines over stdio), presidio_detection.py (the only
+python/                   # gliner_helper.py (long-lived, JSON lines over stdio), accelerators.py (the only file
+                          # that knows hardware: probe, back ends, loading, check against the CPU), presidio_detection.py (the only
                           # file that uses Presidio and spaCy), document_extraction.py (the only file that uses
                           # Docling; one process per PDF), requirements.txt
 desktop/                  # main.js (Electron: search path, data folder, bundled helper and model, lock-down),
@@ -134,9 +135,11 @@ desktop/                  # main.js (Electron: search path, data folder, bundled
 config/adapters.json      # CLI adapters (command, args, stdin template)
 prompts/                  # Prompt files and GLiNER labels; <name>.<ext> overrides <name>.default.<ext>
 tests/                    # core/, server/, helper/, model/, fixtures/, helpers/ (Section 8)
-docs/architecture.md      # How the parts fit together (keep it up to date)
+README.md                 # For people using the app: what it does, getting started, using it. Short, no internals.
+docs/setup.md             # For people installing from source: setup, optional parts, building, tests
 docs/adr/                 # Architecture decisions
-docs/todo.md              # Planned work and open decisions (keep it current)
+agents/                   # For agents and developers: README.md (index), architecture.md, reference.md (API, env,
+                          # protocols, internals, licences, measurements), testing.md, todo.md (planned work)
 parked/                   # Code not enabled yet (API targets), not served
 ```
 
@@ -233,7 +236,7 @@ Rules:
 ## 9. Configuration & Secrets
 
 - User settings live in `settings.json` (written by `server/settings.js` with mode 0600) and a localStorage copy. Add a new setting to `SETTING_FIELDS` in `ui/settings-store.js` and to the Settings tab; settings save automatically.
-- Server configuration comes from environment variables, read and validated once in `server/config.js` (`PORT`, `GLINER_PYTHON`, `PSEUDONYMIZER_DATA_DIR`, `DETECTION_HELPER`, `PSEUDONYMIZER_APP`); the server refuses to start with invalid values. Never read `process.env` elsewhere, except in `desktop/main.js`, which sets these variables before it starts the server. Document new ones in the README in the same change.
+- Server configuration comes from environment variables, read and validated once in `server/config.js` (`PORT`, `GLINER_PYTHON`, `PSEUDONYMIZER_DATA_DIR`, `DETECTION_HELPER`, `PSEUDONYMIZER_APP`); the server refuses to start with invalid values. Never read `process.env` elsewhere, except in `desktop/main.js`, which sets these variables before it starts the server. Document new ones in `agents/reference.md` in the same change, and in `docs/setup.md` if users set them.
 - `settings.json` and `.venv/` are never committed (see `.gitignore`). `settings.json` is never served as a static file.
 - Never put secrets in prompts, `config/adapters.json`, the README or examples.
 
@@ -257,7 +260,7 @@ The app is single-user and local. Keep it that way:
 ## 11. Server API
 
 - Routes are the `ROUTES` table in `server/index.js`; handlers live in the module of their feature (`server/cli.js`, `server/gliner.js`, `server/settings.js`) and stay thin.
-- Request and response shapes are plain JSON; keep client and server in sync in the same change and document new endpoints in the README.
+- Request and response shapes are plain JSON; keep client and server in sync in the same change and document new endpoints in `agents/reference.md`.
 - Use correct methods and status codes (GET reads, PUT replaces settings, POST runs detection or a model).
 - Evolve the API additively: add fields, don't rename or remove them. Flag any breaking change in your summary.
 
@@ -297,6 +300,7 @@ The app is single-user and local. Keep it that way:
 ## 15. Dependencies
 
 - Zero runtime npm dependencies is a deliberate property: easy to audit, and `npm start` needs no `npm install`. The only devDependencies are the desktop build tools (Electron, electron-builder), pinned exactly and never imported by `server/` or `public/`. Adding any dependency needs the user's approval.
+- Hardware acceleration goes through `python/accelerators.py` only. A back end other than PyTorch on the CPU is used only after it found the same values as the CPU on the test text (`verify`); otherwise the CPU is used and the user is told (`runtime.notice`). ONNX Runtime always gets an explicit list of local providers, never the defaults (they include `AzureExecutionProvider`). New back ends need the same check and an entry in the allowlist pattern `ACCELERATOR` in `server/gliner.js`.
 - The desktop app must stay offline: models are bundled and loaded with `HF_HUB_OFFLINE=1`, and `desktop/main.js` blocks every request from the window that doesn't go to this machine. Check new Electron or Chromium features for background downloads (the spell checker fetched dictionaries from Google until it was switched off).
 - Prefer platform APIs (`fetch`, `URL`, `AbortController`, `crypto.randomUUID`, `Intl`, Node built-ins).
 - Browser libraries are vendored into the repo with their version and licence noted, never loaded from a CDN.
@@ -328,9 +332,12 @@ The app is single-user and local. Keep it that way:
 ## 17. Documentation Duties
 
 Update docs in the same change that makes them outdated:
-- New setting, command, environment variable or setup step: `README.md`.
-- New detector labels or prompt behavior: `README.md` and, if relevant, `prompts/README.md`.
-- New project fact (runtime, command, structure): Section 0 and 4 of this file, and `docs/architecture.md`.
+- Keep the audiences apart: `README.md` is for people using the app (plain language, short, no internals), `docs/setup.md` for people installing it, `agents/` for agents and developers. Don't add technical detail to the README.
+- New user-visible feature or limitation: a short note in `README.md`. New setup step or optional install: `docs/setup.md`.
+- New API route, environment variable, protocol, data location, model or licence, measurement: `agents/reference.md`. New test setup or pitfall: `agents/testing.md`.
+- New detector labels or prompt behavior: `agents/reference.md` and, if relevant, `prompts/README.md`.
+- New project fact (runtime, command, structure): Section 0 and 4 of this file, and `agents/architecture.md`.
+- Planned work and open decisions: `agents/todo.md`; remove items when done.
 - Significant decisions (adding a build step, TypeScript, an npm dependency, a hosted service, a new process or storage location): propose an ADR in `docs/adr/` and mention it in your summary.
 
 ---
@@ -348,5 +355,5 @@ Before reporting the task as done, confirm each of these:
 - [ ] No content or secrets in logs; `innerHTML` only for static strings.
 - [ ] Verified with synthetic data in the running app; `check` passes; tests pass where they exist.
 - [ ] Test artifacts are cleaned up (settings restored, servers stopped).
-- [ ] README and this file are updated where needed.
+- [ ] README, docs/setup.md, agents/ and this file are updated where needed.
 - [ ] Your summary lists assumptions, unverified parts and suggested follow-ups.

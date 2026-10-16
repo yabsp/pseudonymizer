@@ -3,4 +3,8 @@ sentencepiece==0.2.2
 protobuf==7.36.2
 presidio-analyzer==2.2.364
 docling==2.139.0
-# docling pulls in torchvision; with the CPU build of torch it must be the CPU build too, see README
+# docling pulls in torchvision; with the CPU build of torch it must be the CPU build too, see docs/setup.md
+# for hardware acceleration through ONNX Runtime (see docs/setup.md, "Hardware acceleration"); on Windows,
+# onnxruntime-directml replaces onnxruntime for any GPU, onnxruntime-gpu for NVIDIA (install only one of them)
+onnx==1.23.2
+onnxruntime==1.31.0

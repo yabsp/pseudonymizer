@@ -1,5 +1,5 @@
-import { $ } from './dom.js';
-import { limitToAvailableDetectors, loadOllamaModels, showDetectorFields, updateModelAlert, warmUpGliner } from './detector-settings.js';
+import { $, setStatus } from './dom.js';
+import { limitToAvailableDetectors, loadHardware, loadOllamaModels, showDetectorFields, updateModelAlert, warmUpGliner } from './detector-settings.js';
 import { applySavedSettings, readSavedSettings, scheduleSave } from './settings-store.js';
 import { loadAdapters, selectModel, showModelChoices, updateTargetName } from './target-settings.js';
 
@@ -8,6 +8,7 @@ export async function loadSettings() {
   const saved = await readSavedSettings();
   applySavedSettings(saved);
   await limitToAvailableDetectors();
+  await loadHardware(saved.accelerator || 'auto');
   showModelChoices();
   showDetectorFields();
   await loadOllamaModels(saved.ollamaModel || '');
@@ -31,6 +32,10 @@ export function initSettingsPanel() {
     void warmUpGliner();
   });
   $('glinerModel').addEventListener('change', () => void warmUpGliner());
+  $('accelerator').addEventListener('change', () => {
+    setStatus('hardwareStatus', '');
+    void warmUpGliner(); // background work: loads and checks the model on the chosen hardware
+  });
   $('ollamaUrl').addEventListener('change', () => void loadOllamaModels());
   $('ollamaModel').addEventListener('change', updateModelAlert);
   $('reloadOllamaBtn').addEventListener('click', () => void loadOllamaModels());

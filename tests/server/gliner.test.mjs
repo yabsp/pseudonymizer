@@ -39,6 +39,22 @@ describe('GLiNER detection endpoint', () => {
     results.forEach((res, i) => assert.equal(res.json().entities[0].text, i % 2 ? 'Reto Ammann' : 'Klinik Seeblick'));
   });
 
+  it('rejects hardware choices that are not on the list', async () => {
+    for (const accelerator of ['cuda', 'onnx-azure', 'torch-cuda --x', '', 7]) {
+      assert.equal((await detect({ text: TEXT, accelerator })).status, 400, String(accelerator));
+    }
+    const res = await detect({ text: TEXT, accelerator: 'auto' });
+    assert.equal(res.status, 200);
+    assert.equal(res.json().runtime.id, 'torch-cpu');
+  });
+
+  it('describes the hardware, only for this app', async () => {
+    const res = await server.api('POST', '/api/hardware', {});
+    assert.equal(res.status, 200, res.body);
+    assert.ok(res.json().system.cpu !== undefined && Array.isArray(res.json().backends));
+    assert.equal((await server.api('POST', '/api/hardware', {}, { Origin: 'https://attacker.example' })).status, 403);
+  });
+
   it('rejects model names that are not "owner/name"', async () => {
     for (const model of ['../../etc/passwd', 'gliner', 'a/b/c', 'a b/c', '', undefined]) {
       const res = await detect({ text: TEXT, model });
@@ -73,7 +89,7 @@ describe('GLiNER detection endpoint without GLiNER', () => {
     try {
       const res = await server.api('POST', '/api/detect/gliner', { text: 'x', labels: ['person'], model: MODEL });
       assert.equal(res.status, 502);
-      assert.match(res.json().error, /"gliner" is not installed.*README/);
+      assert.match(res.json().error, /"gliner" is not installed.*docs\/setup\.md/);
     } finally {
       await server.close();
     }
@@ -107,9 +123,9 @@ describe('Presidio detection endpoint', () => {
     assert.deepEqual(res.json().entities.map((e) => [e.text, e.source]), [['Reto Ammann', 'gliner'], ['Klinik Seeblick', 'gliner'], ['Dorfstrasse', 'presidio']]);
   });
 
-  it('leaves the GLiNER endpoint\'s answer as it was', async () => {
+  it('answers the GLiNER endpoint with the values and where detection ran, and no language', async () => {
     const res = await server.api('POST', '/api/detect/gliner', { text: TEXT, labels: ['person'], threshold: 0.4, model: MODEL });
-    assert.deepEqual(Object.keys(res.json()), ['entities']);
+    assert.deepEqual(Object.keys(res.json()), ['entities', 'runtime']);
   });
 
   it('rejects languages other than auto, de, fr, it and en', async () => {
