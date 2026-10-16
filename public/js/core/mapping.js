@@ -1,4 +1,5 @@
 import { isOnlyCommonWords } from './common-words.js';
+import { isDiagnosisCode } from './patterns.js';
 
 // A placeholder as the app writes it: "[[", upper-case letters, digits or "_", "]]" (e.g. [[PERSON_1]]).
 export const PLACEHOLDER = /\[\[[A-Z0-9_]+\]\]/;
@@ -44,11 +45,18 @@ export function valuePattern(value) {
   return before + escaped + after;
 }
 
-/** Returns a new mapping; the same one if the value is too short, already mapped, or not in sourceText. */
+/**
+ * Returns a new mapping; the same one if the value is too short, already mapped, or not in sourceText. A value
+ * found in sourceText only in another case ("reto ammann") is added as the text writes it.
+ */
 export function addEntry(mapping, original, category, sourceText) {
-  const value = (original || '').trim();
+  let value = (original || '').trim();
   if (value.length < 2) return mapping;
-  if (sourceText !== undefined && !sourceText.includes(value)) return mapping;
+  if (sourceText !== undefined && !sourceText.includes(value)) {
+    const inText = sourceText.match(new RegExp(escapeRegex(value), 'iu'));
+    if (!inText) return mapping;
+    value = inText[0];
+  }
   if (mapping.some((m) => m.original === value)) return mapping;
 
   const name = (category || 'OTHER').toUpperCase().replace(NOT_PLACEHOLDER_CHARS, '_') || 'OTHER';
@@ -66,8 +74,25 @@ const SHORT_FORM_IN_BRACKETS = /\((\p{Lu}[\p{Lu}\p{N}]{1,5})\)/gu;
 const PERSON_PLACEHOLDER_NAME = /^PERSON_\d+$/;
 const ALL_PLACEHOLDERS = new RegExp(PLACEHOLDER.source, 'g');
 
+// One name of a double name: a capital letter, then letters or apostrophes ("Gerber" and "Kunz" in
+// "Gerber-Kunz", "Hans" and "Peter" in "Hans-Peter").
+const SINGLE_NAME = /\p{Lu}[\p{L}']+/gu;
+
 const isPersonEntry = (entry) => PERSON_PLACEHOLDER_NAME.test(nameOf(entry.placeholder));
-const namePartsOf = (value, commonWords) => (value.match(NAME_PART) || []).filter((part) => !commonWords.has(part.toLowerCase()));
+const isNotCommon = (commonWords) => (part) => !commonWords.has(part.toLowerCase());
+const wholeNamePartsOf = (value, commonWords) => (value.match(NAME_PART) || []).filter(isNotCommon(commonWords));
+const namesOfDoubleName = (part, commonWords) => (part.includes('-') ? (part.match(SINGLE_NAME) || []).filter(isNotCommon(commonWords)) : []);
+
+/** The parts of a name, and the single names of a double name ("Nadine Gerber-Kunz" -> "Nadine", "Gerber-Kunz", "Gerber", "Kunz"). */
+function namePartsOf(value, commonWords) {
+  const whole = wholeNamePartsOf(value, commonWords);
+  return [...new Set([...whole, ...whole.flatMap((part) => namesOfDoubleName(part, commonWords))])];
+}
+
+/** The name as written, and with one double name shortened to each of its names ("Nadine Gerber" for "Nadine Gerber-Kunz"). */
+function nameVariants(parts, commonWords) {
+  return [parts, ...parts.flatMap((part, i) => namesOfDoubleName(part, commonWords).map((single) => parts.with(i, single)))];
+}
 
 const MAX_NAME_PARTS_TO_COMBINE = 5;
 
@@ -82,27 +107,49 @@ function partCombinations(parts) {
   return combinations.sort((a, b) => b.length - a.length);
 }
 
-function relatedValues(entry, commonWords) {
-  const shortForms = [...entry.original.matchAll(SHORT_FORM_IN_BRACKETS)].map((m) => m[1]);
-  const nameParts = isPersonEntry(entry) ? namePartsOf(entry.original, commonWords) : [];
-  // Combinations first, so "Jonathan Reyes" becomes one placeholder, not "[[PERSON_1]] [[PERSON_1]]".
-  return [...partCombinations(nameParts), ...nameParts, ...shortForms].filter((value) => value !== entry.original);
+// A lower-case letter at the start or after a space, "-" or "'"; it becomes a capital in the title-case form
+// ("berset-rapin" -> "Berset-Rapin", "o'brien" -> "O'Brien").
+const WORD_START = /(^|[\s'-])(\p{Ll})/gu;
+const titleCase = (value) => value.toLowerCase().replace(WORD_START, (_, before, letter) => before + letter.toUpperCase());
+
+/**
+ * The value in capitals ("RETO AMMANN" in a letterhead, "MKELLER" in a device name) and, if it is not short,
+ * in title case ("Berset-Rapin" in a letter whose header writes "BERSET-RAPIN"). Never in lower case, which
+ * would hide "keller" in "Weinkeller" or the Italian "mia" for "Mia".
+ */
+function caseVariants(value) {
+  const variants = [...value].length < SHORT_VALUE_LENGTH ? [value.toUpperCase()] : [value.toUpperCase(), titleCase(value)];
+  return variants.filter((variant) => variant !== value);
 }
 
-/** The placeholder of the one person already mapped whose name contains all parts of this name ("Mr. Chen"). */
+function relatedValues(entry, commonWords) {
+  const shortForms = [...entry.original.matchAll(SHORT_FORM_IN_BRACKETS)].map((m) => m[1]);
+  const combinations = isPersonEntry(entry)
+    ? [...new Set(nameVariants(wholeNamePartsOf(entry.original, commonWords), commonWords).flatMap(partCombinations))].sort((a, b) => b.length - a.length)
+    : [];
+  const parts = isPersonEntry(entry) ? namePartsOf(entry.original, commonWords) : [];
+  // Combinations first, so "Jonathan Reyes" becomes one placeholder, not "[[PERSON_1]] [[PERSON_1]]".
+  const values = [...combinations, ...parts, ...shortForms];
+  return [...new Set([...values, ...[entry.original, ...values].flatMap(caseVariants)])].filter((value) => value !== entry.original);
+}
+
+const lowerCase = (words) => words.map((word) => word.toLowerCase());
+
+/** The placeholder of the one person already mapped whose name contains all parts of this name, in any case ("Mr. Chen", "CHEN"). */
 function placeholderOfSamePerson(mapping, name, commonWords) {
-  const parts = namePartsOf(name, commonWords);
+  const parts = lowerCase(namePartsOf(name, commonWords));
   if (!parts.length) return null;
   const candidates = new Set(mapping
-    .filter((m) => m.original && isPersonEntry(m) && parts.every((part) => namePartsOf(m.original, commonWords).includes(part)))
+    .filter((m) => m.original && isPersonEntry(m) && parts.every((part) => lowerCase(namePartsOf(m.original, commonWords)).includes(part)))
     .map((m) => m.placeholder));
   return candidates.size === 1 ? [...candidates][0] : null;
 }
 
 /**
- * Hides a name's parts ("Hi Sarah" after "Sarah Johnson") and short forms ("USZ" after "Universitätsspital
- * Zürich (USZ)") where they would otherwise stay visible. They share the placeholder of the full value, so the
- * model sees the same person, and the answer gets the full value back.
+ * Hides a name's parts ("Hi Sarah" after "Sarah Johnson"), short forms ("USZ" after "Universitätsspital
+ * Zürich (USZ)") and values in capitals or title case ("RETO AMMANN") where they would otherwise stay visible.
+ * They share the placeholder of the full value, so the model sees the same person, and the answer gets the
+ * full value back.
  */
 function addRelatedValues(mapping, sourceText, commonWords) {
   const stillVisible = pseudonymize(mapping, sourceText).replace(ALL_PLACEHOLDERS, ' ');
@@ -119,9 +166,13 @@ function addRelatedValues(mapping, sourceText, commonWords) {
   return result;
 }
 
+// A Roman numeral from I to XXXIX, as in "NYHA II", "grade III" or "phase IV": up to three X, then IX, IV or
+// an optional V and up to three I; the lookahead (?=.) makes sure it is not empty.
+const ROMAN_NUMERAL = /^(?=.)X{0,3}(?:IX|IV|V?I{0,3})$/;
+
 function addDetectedValue(mapping, { text, category }, sourceText, commonWords) {
-  if (isOnlyCommonWords(text, commonWords)) return mapping;
   const value = text.trim();
+  if (isOnlyCommonWords(text, commonWords) || isDiagnosisCode(value) || ROMAN_NUMERAL.test(value)) return mapping;
   const samePerson = category === 'PERSON' && sourceText.includes(value) && !mapping.some((m) => m.original === value)
     ? placeholderOfSamePerson(mapping, value, commonWords)
     : null;
@@ -150,11 +201,18 @@ function longerFormOf(entity, entities, commonWords) {
   return isOnePerson ? longest : null;
 }
 
+// A line break with any spaces around it. Detectors sometimes return one value across lines ("Cabinet de la
+// Place, 1450 Sainte-Croix\n\nCher Confrère"); each line is a value of its own, also where it stands alone.
+const LINE_BREAK = /\s*\n\s*/;
+const splitAtLineBreaks = (entities) => entities.flatMap((entity) => entity.text.split(LINE_BREAK).map((text) => ({ ...entity, text })));
+
 /**
- * Values made only of common words are dropped; a shorter form of a person ("Mr. Chen", "Jonathan Reyes" next to
- * "Jonathan Andrew Reyes") shares the placeholder of the longer one, whichever the detector lists first.
+ * Values made only of common words, diagnosis codes and Roman numerals are dropped; values across lines are
+ * split into lines; a shorter form of a person ("Mr. Chen", "Jonathan Reyes" next to "Jonathan Andrew Reyes")
+ * shares the placeholder of the longer one, whichever the detector lists first.
  */
-export function addDetected(mapping, entities, sourceText, commonWords) {
+export function addDetected(mapping, detected, sourceText, commonWords) {
+  const entities = splitAtLineBreaks(detected);
   const withDetected = entities.reduce((m, entity) => {
     const longer = longerFormOf(entity, entities, commonWords);
     const withLonger = longer ? addDetectedValue(m, { text: longer, category: 'PERSON' }, sourceText, commonWords) : m;

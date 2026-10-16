@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { GLINER_HELPER, GLINER_PYTHON, ROOT } from './config.js';
+import { HELPER_COMMAND } from './config.js';
 import { readBody, rejectUnlessFromApp, send } from './http.js';
 
 // Hugging Face model ids: "owner/name", each part letters, digits, "_", "." or "-" (e.g. "urchade/gliner_multi_pii-v1").
@@ -9,7 +9,7 @@ const LANGUAGES = ['auto', 'de', 'fr', 'it', 'en'];
 let helper = null;
 
 function startHelper() {
-  const child = spawn(GLINER_PYTHON, [GLINER_HELPER], { cwd: ROOT });
+  const child = spawn(HELPER_COMMAND.command, HELPER_COMMAND.args, { cwd: HELPER_COMMAND.cwd });
   const state = { child, pending: new Map(), nextId: 1 };
   let unreadOutput = '';
   let recentErrors = '';
@@ -40,7 +40,7 @@ function startHelper() {
   });
   child.stderr.on('data', (data) => (recentErrors = (recentErrors + data).slice(-4000)));
   child.stdin.on('error', () => {}); // reported by the 'error' and 'close' handlers below
-  child.on('error', (e) => failAll(new Error(`Could not start Python ("${GLINER_PYTHON}"): ${e.message}. See README, section "Detection with GLiNER".`)));
+  child.on('error', (e) => failAll(new Error(`Could not start the detection helper ("${HELPER_COMMAND.command}"): ${e.message}. See README, section "Detection with GLiNER".`)));
   child.on('close', (code) => failAll(new Error(`The GLiNER helper stopped (exit code ${code}). ${recentErrors.trim().split('\n').slice(-3).join(' ')}`)));
   return state;
 }

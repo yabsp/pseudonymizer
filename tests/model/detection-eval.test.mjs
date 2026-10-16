@@ -21,18 +21,31 @@ const DETECTORS = {
     path: '/api/detect/gliner',
     // 2026-10-15: 25 labels, 150-word windows, name parts and short forms, patterns for IDs after a label,
     // reference codes, IBANs, dates and addresses; 14 documents
+    // 2026-10-16: measured again with the 15 generated documents (29 in all); "Gerber" and "Lea" are now hidden
+    // (single names of double names, names of relatives), windows with underscores are read twice
     knownMisses: {
-      'therapy-note-de': ['Gerber', 'Lea'],
+      'r3-markdown-case-table': ['Peter', 'Ruth'],
+      'r5-it-ticket-mixed': ['Scheidung_Wenger_Rosa'],
     },
-    knownChanges: {},
+    knownChanges: {
+      'r9-dataroom-index-en': ['D&O insurance'],
+    },
   },
   presidio: {
     path: '/api/detect/presidio',
     // 2026-10-15: GLiNER as above plus Presidio 2.2.364 with the large spaCy models, language recognized automatically
-    knownMisses: {},
+    // 2026-10-16: measured again with the 15 generated documents (29 in all)
+    knownMisses: {
+      'r5-it-ticket-mixed': ['Scheidung_Wenger_Rosa'],
+    },
     knownChanges: {
       'escalation-email-en': ['Honda Civic'],
       'trustee-notes-de-ch': ['Vorbezüge'],
+      'r1-auth-log-en': ['auth-service', 'api-gw'],
+      'r1-lab-report-it': ['Emoglobina', 'Ferritina'],
+      'r2-invoice-it': ['Pagamento entro 30 giorni', 'Assistenza legale'],
+      'r6-lab-results-de': ['Kreatinin', 'Thrombozyten'],
+      'r9-dataroom-index-en': ['D&O insurance'],
     },
   },
 };

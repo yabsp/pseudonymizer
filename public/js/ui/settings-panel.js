@@ -1,5 +1,5 @@
 import { $ } from './dom.js';
-import { loadOllamaModels, showDetectorFields, updateModelAlert, warmUpGliner } from './detector-settings.js';
+import { limitToAvailableDetectors, loadOllamaModels, showDetectorFields, updateModelAlert, warmUpGliner } from './detector-settings.js';
 import { applySavedSettings, readSavedSettings, scheduleSave } from './settings-store.js';
 import { loadAdapters, selectModel, showModelChoices, updateTargetName } from './target-settings.js';
 
@@ -7,6 +7,7 @@ export async function loadSettings() {
   await loadAdapters();
   const saved = await readSavedSettings();
   applySavedSettings(saved);
+  await limitToAvailableDetectors();
   showModelChoices();
   showDetectorFields();
   await loadOllamaModels(saved.ollamaModel || '');

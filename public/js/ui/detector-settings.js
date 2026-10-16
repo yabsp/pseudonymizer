@@ -1,7 +1,8 @@
 import { detectWithGliner } from '../detection/gliner.js';
 import { listOllamaModels } from '../detection/ollama.js';
+import { callServer } from '../server-api.js';
 import { $, setStatus } from './dom.js';
-import { readSettings } from './settings-store.js';
+import { readSettings, scheduleSave } from './settings-store.js';
 
 let isGlinerBroken = false;
 
@@ -12,6 +13,28 @@ const usesGliner = (detector) => detector === 'gliner' || detector === 'presidio
 export function updateModelAlert() {
   const isReady = usesGliner($('detector').value) ? !isGlinerBroken : !!$('ollamaModel').value;
   $('settingsAlert').hidden = isReady;
+}
+
+const ABOUT_TIMEOUT_MS = 3000;
+
+/**
+ * Removes detectors this app doesn't have (the desktop app ships without Presidio). A saved choice that is gone
+ * switches to GLiNER, and the user is told, so nothing silently runs with a different detector.
+ */
+export async function limitToAvailableDetectors() {
+  let available;
+  try {
+    ({ detectors: available } = await callServer('api/about', { signal: AbortSignal.timeout(ABOUT_TIMEOUT_MS) }));
+  } catch {
+    return; // an older or unreachable server: keep every option, detection reports its own errors
+  }
+  const select = $('detector');
+  const saved = select.options[select.selectedIndex]?.text;
+  for (const option of [...select.options]) if (!available.includes(option.value)) option.remove();
+  if (select.value) return;
+  select.value = 'gliner';
+  setStatus('detectStatus', `"${saved}" is not available in this app, so GLiNER is used. You can change this under Settings.`, true);
+  scheduleSave();
 }
 
 export function showDetectorFields() {

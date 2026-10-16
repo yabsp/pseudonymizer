@@ -1,9 +1,25 @@
-// Planned (AGENTS.md, section 4): extract the text locally with a vendored pdf.js, loaded only here and only when
-// a PDF is opened; scanned pages need local OCR. The original PDF is never sent; only text goes on to detection.
+import { callServer } from '../server-api.js';
+
+// The server's limit (MAX_PDF_BYTES in server/config.js), checked here first so a large file isn't uploaded in vain.
+const MAX_PDF_BYTES = 50 * 1024 * 1024;
+
+/**
+ * The PDF goes to the local server only, which extracts it with Docling on this machine. What comes back is
+ * Markdown (headings, tables, formulas as LaTeX if converted) with a marker for every image; the PDF itself is
+ * never sent on. With formulas, they are converted too, which takes about a minute each.
+ */
 export const PDF_IMPORTER = {
   label: 'PDF',
   extensions: ['pdf'],
-  async read(file) {
-    throw new Error(`Opening PDFs is not available yet. Copy the text out of "${file.name}" and paste it instead.`);
+  async read(file, { signal, progress = () => {}, formulas = false } = {}) {
+    if (file.size > MAX_PDF_BYTES) throw new Error(`"${file.name}" is larger than 50 MB. Split it into smaller parts.`);
+    progress(formulas
+      ? 'Converting formulas on this machine. This takes about a minute per formula.'
+      : 'Reading text, tables and images on this machine. Scanned pages take longer.');
+    const result = await callServer('api/extract/pdf' + (formulas ? '?formulas=1' : ''), {
+      method: 'POST', body: file, contentType: 'application/pdf', signal,
+    });
+    const { markdown, ...facts } = result;
+    return { text: markdown, document: facts };
   },
 };

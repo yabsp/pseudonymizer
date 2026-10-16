@@ -13,7 +13,7 @@ AI tool the user has installed and logged in to.
  │           restore, patterns   │         │ gliner.js ─┐                     │
  │ detection/ GLiNER, Presidio,  │
  │           Ollama              │
- │ import/   text, PDF (planned) │         │ cli.js ────┼─┐                   │
+ │ import/   text, PDF           │         │ cli.js ────┼─┐                   │
  │ targets/  CLI                 │         └────────────┼─┼───────────────────┘
  └──────────────┬────────────────┘                      │ │ stdin/stdout
                 │ HTTP (only for the Ollama detector)   │ ▼
@@ -29,12 +29,16 @@ AI tool the user has installed and logged in to.
    format and only the extracted text goes on. The file itself is never sent.
 1. **Detect.** The selected detector finds sensitive values in the text: GLiNER through the server and
    the Python helper, GLiNER plus Presidio (spaCy's name finder and Presidio's recognizers, in the same
-   helper), or a chat model in Ollama. Fixed patterns (emails, URLs, IP and MAC addresses, AHV numbers,
-   BIC/SWIFT codes, IBANs, card numbers and their last digits, security codes and expiry dates, usernames, IDs after a
-   label, reference codes, dates and timestamps, street addresses, phone numbers) are added first, so their category wins. Values that don't
-   literally appear in the text, or consist only of words that are never sensitive (`prompts/not-sensitive*.txt`),
-   are dropped. Parts of found names used on their own ("Hi Sarah") and short forms in brackets share the
-   placeholder of the full value.
+   helper), or a chat model in Ollama. Fixed patterns (emails, URLs and connection strings, IP and MAC addresses,
+   AHV numbers, BIC/SWIFT codes, IBANs, postal accounts, company numbers, Italian tax codes, card numbers (also
+   masked) and their last digits, security codes and expiry dates, access keys and tokens, passwords after their
+   name, usernames, IDs after a label, reference and court case numbers, passport numbers, Swiss license plates,
+   dates and timestamps, street addresses, postal code and town, names after a label, an academic title, "Fam."
+   or a word for a relative, phone numbers) are added first, so their category wins. Values that don't literally
+   appear in the text (in any case), consist only of words that are never sensitive (`prompts/not-sensitive*.txt`),
+   or are diagnosis codes or Roman numerals are dropped; a value across lines becomes one value per line. Parts of
+   found names used on their own ("Hi Sarah", "Frau Gerber" after "Nadine Gerber-Kunz"), short forms in brackets
+   and the same values in capitals or title case ("RETO AMMANN") share the placeholder of the full value.
 2. **Review.** The highlighted preview shows exactly what will be sent; clicking a placeholder shows its
    original value and can keep it visible. The full mapping table (value -> placeholder such as
    `[[PERSON_1]]`) is behind "Edit values".
@@ -52,7 +56,12 @@ AI tool the user has installed and logged in to.
   built with `h()` from `ui/dom.js`, which only ever sets text. No framework and no build step
   (`docs/adr/0002-frontend-without-framework.md`).
 - **Importers** (`public/js/import/`): one file per document format, registered in `IMPORTERS`, each
-  `read(file, { signal, progress }) -> { text }`. Text files work; PDF is registered and planned.
+  `read(file, options) -> { text, document? }`. Text files fill the text box; a PDF becomes a document
+  (`state.document` in `ui/workflow.js`) that is sent as an attachment inside the message or saved as Markdown.
+- **PDF extraction** (`server/documents.js`, `python/document_extraction.py`): the page uploads the PDF to
+  `POST /api/extract/pdf`; the server writes it to a private temporary folder, starts one Docling process per
+  file (killed on cancel or after 30 minutes) and deletes the folder afterwards. Docling returns Markdown with
+  tables, numbered image, formula and page markers, and formulas as LaTeX when asked (`?formulas=1`).
 - **Theme**: CSS tokens in `style.css`; `js/theme-boot.js` applies a chosen theme before the first paint,
   `ui/theme.js` switches between System, Light and Dark.
 - **Server** (`server/`): Node built-ins only. Configuration in `config.js`, routes in `index.js`,
@@ -63,11 +72,22 @@ AI tool the user has installed and logged in to.
   answer per line on stdout, matched by `id`:
   `{"id", "text", "labels", "threshold", "model", "engine", "language"}` ->
   `{"id", "entities": [{"text", "label", "start", "end", "score", "source"}], "language"}` or `{"id", "error"}`.
+  GLiNER reads the text in windows of 150 words; windows with underscores inside words ("Vertrag_Mueller.pdf")
+  are read a second time with spaces instead, so names in file names are found.
   `engine` is `gliner` (default) or `presidio`, which adds Presidio's values (`source: "presidio"`, `label` a
   Presidio type such as `PERSON`) and the `language` used (`auto` is guessed from frequent words). An empty
   text only loads GLiNER. `python/presidio_detection.py` is the only file that uses Presidio: it loads a
   spaCy model per language on first use, never downloads one, and removes Presidio's e-mail and URL
   recognizers (the e-mail one fetches a domain list from the internet).
+
+## Desktop app
+`desktop/main.js` is the Electron main process. It asks the login shell for the search path (so the CLIs are
+found when the app is started from the desktop), sets the server's environment (data folder, bundled helper,
+offline model folder), imports the unchanged `server/index.js` and waits for `listening`, then opens a window on
+`http://127.0.0.1:<port>` (port 47291, or a free one). The window has no Node access, can't navigate away or
+open new windows, gets no permissions, and every request that doesn't go to this machine is cancelled.
+The installer carries the app code in `app.asar`, the helper built by PyInstaller in `resources/helper` and
+the model in `resources/models`. See `docs/adr/0003-desktop-app-electron.md`.
 
 ## Configuration as data
 - `config/adapters.json`: the CLIs, their arguments, how the prompt is passed, login hints and models.
@@ -78,4 +98,4 @@ AI tool the user has installed and logged in to.
 ## Not enabled yet
 - Direct API providers (Anthropic, OpenAI-compatible, Gemini) are parked in `parked/api-targets/` until
   they are tested.
-- PDF import (rules in `AGENTS.md`, section 4).
+- PDF import in the desktop app (Docling is not bundled yet).

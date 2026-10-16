@@ -8,13 +8,36 @@ npm start                 # Node 22+, no npm install needed (no dependencies)
 ```
 Open http://localhost:8091 (change with `PORT=9000 npm start`). For the default detector, install GLiNER once (see "Detection with GLiNER" below).
 
+## Desktop app
+Pseudonymizer also runs as a desktop app that brings everything with it: the page, the local server, the detection helper with PyTorch and GLiNER, and the model. No Python, Node or download is needed, and nothing is fetched from the internet.
+
+**Using it**
+- **Linux:** download `Pseudonymizer-<version>-x86_64.AppImage`, make it executable (`chmod +x`, or Properties > "Allow executing") and start it.
+- **Windows:** run `Pseudonymizer-Setup-<version>.exe`. It installs for the current user; without a code signature Windows shows a SmartScreen warning ("More info" > "Run anyway").
+- The AI tools are the same as above: Claude Code, Codex or Gemini CLI installed and logged in on this computer. The app looks for them where a terminal would.
+- Settings are kept in `~/.config/pseudonymizer/` (Linux) or `%APPDATA%\pseudonymizer\` (Windows).
+- Not in the desktop app yet: the Presidio detector, and keeping changed prompt files (changes in the Prompts tab last until the app is closed).
+- The window only loads from this computer (the app and a local Ollama); every other request, such as Chromium's spell-check dictionaries, is blocked.
+
+**Building it** (needs the development setup: Node, `.venv` with GLiNER, the model downloaded once by running detection)
+```
+npm install                          # Electron and electron-builder (build tools only)
+.venv/bin/pip install pyinstaller    # Windows: .venv\Scripts\pip install pyinstaller
+npm run desktop                      # try the desktop app from the project folder
+npm run dist:linux                   # dist/Pseudonymizer-<version>-x86_64.AppImage (about 1.4 GB)
+npm run dist:win                     # on Windows: dist/Pseudonymizer-Setup-<version>.exe
+```
+`dist:*` builds the detection helper with PyInstaller (`build/helper`), copies the model from the Hugging Face cache (`build/models`) and packs the app. PyInstaller can't build for another system, so build each system's version on that system. The Windows build is prepared but has not been built or tested yet.
+
+The server reads three more environment variables, which the desktop app sets: `PSEUDONYMIZER_DATA_DIR` (absolute folder for `settings.json`, default the project folder), `DETECTION_HELPER` (path of the bundled helper program, used instead of Python and the script) and `PSEUDONYMIZER_APP` (`server` or `desktop`; the desktop app offers no Presidio). `GET /api/about` returns `{ "app", "detectors" }`.
+
 ## Using the app
 The top bar has three tabs:
 - **Pseudonymize**: paste your text (or open or drop a text file) and find the sensitive values. Then step 2 shows exactly what will be sent, with the hidden parts highlighted: click one to see the original or to keep it visible, and open "Edit values" for the full list. Step 3 sends it, step 4 shows the answer with the original values restored.
 - **Settings**: the detection model (GLiNER, GLiNER + Presidio, or Ollama) and the target model; rarely needed options are under "Advanced". Changes are saved automatically. A red dot means the detection model isn't ready.
 - **Prompts**: the prompt files, see below.
 
-The button at the top right switches between the system's light or dark mode, Light and Dark; the choice is kept in this browser. Files: text formats (.txt, .md, .csv, .json, .eml and similar, up to 5 MB) open directly; PDF import is planned, and opening a PDF says so.
+The button at the top right switches between the system's light or dark mode, Light and Dark; the choice is kept in this browser. Files: text formats (.txt, .md, .csv, .json, .eml and similar, up to 5 MB) open into the text box; PDFs (up to 50 MB) open as a document, see "Opening PDF documents".
 
 While a model is working, the page is blocked with a progress window. **Cancel** (or Escape) stops the request; for CLIs, the server also stops the CLI process. Sending is only possible after detection has run. Pressing Detect without a detection model explains what is missing and offers to continue with patterns only. The model's answer is shown with the original values restored; the raw answer (with placeholders) is behind "Show model answer before restoring", where you can also paste an answer from any chat.
 
@@ -26,7 +49,7 @@ Three local detectors, chosen under Settings > Detection model. All run on this 
 
 | | GLiNER (default) | GLiNER + Presidio | Ollama LLM |
 |---|---|---|---|
-| Speed | under 1 s for a letter, about 15 s for a 100-row CSV export (model loads once, ~5 s) | about the same, plus 2-3 s the first time a language is used | about 1-2 min on a laptop |
+| Speed | under 1 s for a letter, about 15 s for a 100-row CSV export (model loads once, ~5 s) | about the same, plus 2-3 s the first time a language is used | about 1-2 min on a laptop, depending on model |
 | Finds | the labels in `prompts/gliner-labels.default.txt` (or your `gliner-labels.txt`) | the same, plus names, places and organisations found by spaCy, and phone, card and bank numbers | whatever `prompts/rules.md` describes |
 | Needs | Python with the `gliner` package | the same, plus Presidio and a spaCy model per language (about 2.2 GB) | Ollama with a chat model |
 
@@ -43,7 +66,7 @@ The model itself (1.1 GB) is downloaded from Hugging Face the first time it is u
 
 Settings: **Sensitivity** trades misses against false hits (Balanced is a good start).
 
-Detectors sometimes report pronouns, titles or greetings as values ("ich", "Sie", "Sehr geehrte Damen und Herren"). Values made only of such words are ignored; the list is `prompts/not-sensitive.default.txt` and can be extended like the labels.
+Detectors sometimes report pronouns, titles, greetings or generic words as values ("ich", "Sie", "Sehr geehrte Damen und Herren", "Avocate", "Tribunal des baux", "Vater", "Cordialement"). Values made only of such words are ignored; the list is `prompts/not-sensitive.default.txt` and can be extended like the labels.
 
 What GLiNER looks for is a plain text file, one `label = CATEGORY` per line, e.g. `date of birth = DATE`. The shipped list is `prompts/gliner-labels.default.txt`; to change it, copy it to `prompts/gliner-labels.txt` and edit the copy. The labels are also shown and can be tried out in the Prompts tab.
 
@@ -59,6 +82,26 @@ What GLiNER looks for is a plain text file, one `label = CATEGORY` per line, e.g
 Install only the languages you need; a text in a language whose model is missing fails with a message instead of being detected with less protection. The app never downloads models by itself. Under Settings, **Language of your texts** is recognized automatically by default (the result says which language was used); set it if your texts mix languages. Each loaded language needs about 0.7 GB of memory on top of GLiNER's 2.8 GB.
 
 Presidio's e-mail and URL recognizers are switched off: the e-mail one downloads a domain list from the internet, and the app's patterns and GLiNER find both. Plain dates and nationalities found by Presidio are ignored, as with GLiNER.
+
+### Opening PDF documents
+Open or drop a PDF in step 1. It is read on this machine with [Docling](https://github.com/docling-project/docling) (MIT) and shown as a document card instead of filling the text box: pages, tables, images and formulas, and the extracted text behind "Show extracted text". Detection and review work as for pasted text. In step 3 the pseudonymized document is sent inside the message, between `<document>` markers, followed by your question; nothing goes through the clipboard. "Save as file" saves it as Markdown (`pseudonymized-document-<date>.md`) for uploading to any chat yourself; paste the answer under "Already have an answer" to restore the names.
+
+What is extracted and what is not:
+- Headings, paragraphs and lists as Markdown, tables as Markdown tables, page breaks as `--- Page 2 ---`.
+- Scanned pages and text inside images are read with local OCR (RapidOCR, multilingual PP-OCRv6 model) and pseudonymized like all other text.
+- Images are never sent: each is replaced by `[Image 1, page 2: not sent]`. The PDF itself, its metadata, comments, form fields and attachments are never sent either.
+- Formulas are marked as `[Formula 1, page 2: not converted]` at first. "Convert formulas" turns them into LaTeX (`$$\frac{m}{h^{2}}$$`); this takes about a minute per formula on a CPU.
+- The file name is not sent and not used for saved files, as it often contains a name.
+
+Speed on a laptop CPU: a few seconds per page with a text layer, about 10 seconds per scanned page, plus about a minute per formula when converting. Install once, into `.venv`:
+```
+.venv/bin/pip install "torchvision==0.29.1" --index-url https://download.pytorch.org/whl/cpu   # must match the CPU build of torch
+.venv/bin/pip install -r python/requirements.txt                                               # adds docling
+.venv/bin/docling-tools models download layout tableformer code_formula rapidocr --rapidocr-backend-lang torch:de
+```
+The models (about 1.1 GB, in `~/.cache/docling/models`; set `DOCLING_ARTIFACTS_PATH` for another folder) are used offline afterwards: layout model (Apache-2.0), table and formula models (CDLA-Permissive-2.0), RapidOCR (Apache-2.0). Install torchvision before docling: the version docling would pick from PyPI does not work with the CPU build of torch and breaks GLiNER.
+
+`POST /api/extract/pdf` (body: the PDF, `Content-Type: application/pdf`, `?formulas=1` to convert formulas) returns `{ "markdown", "pages", "images", "formulas", "formulasConverted", "tables" }`.
 
 ### Detection with Ollama
 ```
@@ -88,7 +131,7 @@ Usage counts against your plan's limits. Only use the tools as installed, logged
 See `prompts/README.md`. `prompts/<name>.md` is always preferred over `prompts/<name>.default.md`; if neither exists the app shows an error and won't detect or send.
 
 ## How it works
-1. A local detector (plus optional patterns for emails, URLs, IPv4/IPv6 and MAC addresses, AHV numbers, BIC/SWIFT codes, IBANs, card numbers (also without a valid checksum after "card number"), their last four digits after "ending in", security codes and expiry dates, usernames after "Skype:" or "Username:", IDs after a label such as "ID:", "Nr.", "réf.", "VIN:" or "Group #", reference codes such as "INC-20419", dates written with "/" or as 2026-10-14, timestamps such as 2026-10-14T08:14:00Z (with the time), street addresses in American, German, Swiss, French and Italian notation, and phone numbers) lists sensitive values. Where a pattern and the detector find the same value, the pattern's category is used. Values that don't literally appear in the input are discarded. When a person is found, a first or last name used on its own elsewhere ("Hi Sarah"), or first and last name without the middle name, gets the same placeholder, and so does a short form in brackets ("Universitätsspital Zürich (USZ)" and later "USZ").
+1. A local detector (plus optional patterns for emails, URLs of any scheme including connection strings such as `postgresql://user:password@host`, IPv4/IPv6 and MAC addresses, AHV numbers, BIC/SWIFT codes, IBANs, Swiss postal accounts (30-123456-6), Swiss company numbers (CHE-123.456.789), Italian tax codes, card numbers (also without a valid checksum after "card number", and masked as 4111\*\*\*\*1111), their last four digits after "ending in", security codes and expiry dates, access keys and tokens of well-known services (AWS, GitHub, GitLab, Slack, Stripe, OpenAI, Anthropic, Google, JSON Web Tokens, "Bearer ..."), passwords, keys and tokens after their name ("password: ...", "DB_PASSWORD=...", "das Passwort ist ..."), usernames after "Skype:" or "Username:", after "user=" or "owner=" in logs and in home folder paths (C:\Users\name), IDs after a label such as "ID:", "Nr.", "réf.", "N°", "VIN:", "S/N", "Patient-ID" or "Group #", reference codes such as "INC-20419", "P-104233" or "4471-ZRH", court case numbers ("ZK 26 318", "4A_123/2026", "HG250117-O", "VB.2026.00321", "2026/TI/4471"), passport and ID card numbers such as "X1234567", Swiss license plates ("ZH 123456", "SO 77 312"), dates written with "/" or as 2026-10-14, timestamps such as 2026-10-14T08:14:00Z (with the time), street addresses in American, German, Swiss, French and Italian notation, postal code and town on a line of their own ("1752 Villars-sur-Glâne"), names after a label ("Name:", "Prénom :", "Patient:"), after an academic title ("Dr. med. Laurin Hofer", "lic. iur. ..."), after "Fam." or "famille", and of relatives ("Ihre Tochter Lea (7)", "his brother Vincent"), and phone numbers; lab reference ranges, years and calendar weeks are not taken for phone numbers) lists sensitive values. Where a pattern and the detector find the same value, the pattern's category is used. Values that don't literally appear in the input (in any case) are discarded, and so are diagnosis codes ("M54.5") and Roman numerals ("II"). A value that spans several lines becomes one value per line. When a person is found, a first or last name used on its own elsewhere ("Hi Sarah"), one name of a double name ("Frau Gerber" after "Nadine Gerber-Kunz"), or first and last name without the middle name, gets the same placeholder, and so does a short form in brackets ("Universitätsspital Zürich (USZ)" and later "USZ"). The same goes for any value written in capitals or in title case elsewhere ("RETO AMMANN" in a letterhead, "Berset-Rapin" after "BERSET-RAPIN"). GLiNER reads names joined by underscores in file names ("Vertrag_Mueller_Brandenberger.pdf") by reading those parts of the text a second time with spaces.
 2. You review and edit the table. The code (not a model) does the replacement, so it is deterministic. Values of 5 or more characters are replaced anywhere, also inside longer words ("Ammanns", "AcmeBillingService"); shorter values only where they stand as a word, so "ich" never breaks "wichtige".
 3. Placeholders look like `[[PERSON_1]]`. On restore, `[PERSON_1]` and `PERSON_1` are also accepted.
 4. Optionally add more text in step 3 that is sent as written, after the pseudonymized text. Use it for the part of the prompt that needs no pseudonymization, such as your question. The app warns if it contains a value from the mapping table.
@@ -123,6 +166,7 @@ The tests use 13 synthetic documents of the app's users (among them a German dis
 - Pseudonymization is only as good as detection. Always check the highlighted preview before sending; `npm test` lists the known gaps.
 
 ## Stubs / open decisions
-- PDF import: `public/js/import/pdf.js` is registered and waiting for a local text extractor (pdf.js, vendored); see AGENTS.md for the rules. Word documents would be one more importer.
+Planned work with first designs is in `docs/todo.md` (document pipeline, notifications, GPU acceleration).
+- PDF import in the desktop app (Docling and its models are not bundled yet). Word documents would be one more importer.
 - Multi-turn chat with the same mapping, currently one request per run.
 - Streaming answers.

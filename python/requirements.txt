@@ -2,3 +2,5 @@ gliner==0.2.29
 sentencepiece==0.2.2
 protobuf==7.36.2
 presidio-analyzer==2.2.364
+docling==2.139.0
+# docling pulls in torchvision; with the CPU build of torch it must be the CPU build too, see README

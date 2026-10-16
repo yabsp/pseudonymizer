@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { knownGap } from '../helpers/known-gaps.mjs';
 import { detectWithPatterns } from '../helpers/core.mjs';
 import { DOCUMENTS } from '../fixtures/documents.mjs';
 
@@ -38,7 +37,7 @@ describe('pattern detection', () => {
     assert.deepEqual(found('see (https://wiki.example.internal/a?b=1#c) and http://10.0.0.5:8080/x', 'URL'), ['https://wiki.example.internal/a?b=1#c', 'http://10.0.0.5:8080/x']);
   });
 
-  it('KNOWN GAP: URLs at the end of a sentence exclude the full stop', knownGap('the full stop becomes part of the URL value; harmless but noisy'), () => {
+  it('URLs at the end of a sentence exclude the full stop', () => {
     assert.deepEqual(found('Details: https://wiki.example.internal/incident-42.', 'URL'), ['https://wiki.example.internal/incident-42']);
   });
 
@@ -89,6 +88,11 @@ describe('pattern detection', () => {
     assert.deepEqual(found('National Provider Identifier (NPI): 1987654320', 'ID'), ['1987654320']);
   });
 
+  it('finds masked card numbers (regression: "PAIEMENT CARTE 4111********1111" stayed visible)', () => {
+    assert.deepEqual(found('PAIEMENT CARTE 4111********1111 MIGROS; card 411111xxxxxx1111; Visa 4111 **** **** 1111', 'CARD'),
+      ['4111********1111', '411111xxxxxx1111', '4111 **** **** 1111']);
+  });
+
   it('finds card security codes only after CVV, CVC or security code', () => {
     assert.deepEqual(found('with the CVV 443, CVC2: 1234, Sicherheitscode 087; Zimmer 443, Code 123', 'SECRET'), ['443', '1234', '087']);
   });
@@ -133,7 +137,7 @@ describe('pattern detection', () => {
     const text = 'Address: 492 West 4th Avenue, Suite 200, New York, NY 10012. Also 77 Ocean View Road, Carmel, CA 93921. '
       + 'Rebgasse 21, 4058 Basel; Lindenhofweg 3; Rue du Rhône 42, 1204 Genève; Place Pury 4; Via ai Grotti 9, 6517 Arbedo.';
     assert.deepEqual(found(text, 'ADDRESS'), ['492 West 4th Avenue, Suite 200', '77 Ocean View Road', 'New York, NY 10012', 'Carmel, CA 93921',
-      'Rebgasse 21', 'Lindenhofweg 3', 'Rue du Rhône 42', 'Place Pury 4', 'Via ai Grotti 9']);
+      '4058 Basel', '1204 Genève', '6517 Arbedo', 'Rebgasse 21', 'Lindenhofweg 3', 'Rue du Rhône 42', 'Place Pury 4', 'Via ai Grotti 9']);
   });
 
   it('finds phone numbers with dots, and never starts a phone number inside another value (regression: "415.555.8822", "503) 555-0142")', () => {
@@ -141,6 +145,142 @@ describe('pattern detection', () => {
     assert.deepEqual(found(text, 'PHONE'), ['(503) 555-0142', '415.555.8822']);
     // four groups like an IPv4 address: hidden, but under IP
     assert.ok(found(text, 'IP').includes('044.555.22.33'));
+  });
+
+  it('finds access keys and tokens of well-known services wherever they stand (regression: AWS keys in a config file stayed visible)', () => {
+    const text = 'key=sk_live_51HxEXAMPLEq8Zt2mN0pQrS7, openai sk-EXAMPLEa1B2c3D4e5F6g7H8i9J0kLmN, ghp_EXAMPLE16C7e42F292c6912E7710c838347Ae178B4a, '
+      + 'xoxb-1234567890-EXAMPLEtoken, AKIAIOSFODNN7EXAMPLE, eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.EXAMPLEsignature0123, '
+      + 'Authorization: Bearer 9f8e7d6c5b4a3928EXAMPLE';
+    assert.deepEqual(found(text, 'SECRET'), ['sk_live_51HxEXAMPLEq8Zt2mN0pQrS7', 'sk-EXAMPLEa1B2c3D4e5F6g7H8i9J0kLmN',
+      'ghp_EXAMPLE16C7e42F292c6912E7710c838347Ae178B4a', 'xoxb-1234567890-EXAMPLEtoken', 'AKIAIOSFODNN7EXAMPLE',
+      'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.EXAMPLEsignature0123', '9f8e7d6c5b4a3928EXAMPLE']);
+  });
+
+  it('finds passwords, keys and tokens after their name in config files, logs and sentences (regression: "aws_secret_access_key: wJalr...")', () => {
+    const text = 'password: "kL9#vB2!mQ"\nDB_PASSWORD=Sommerwind\naws_secret_access_key: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY\n'
+      + '{"api_key": "EXAMPLE1234"} session created sid=9f8e7d6c5b4a39281706f5e4d3c2b1a0; das Passwort ist Kaelin2026! Bitte löschen.';
+    assert.deepEqual(found(text, 'SECRET'), ['kL9#vB2!mQ', 'Sommerwind', 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY', 'EXAMPLE1234',
+      '9f8e7d6c5b4a39281706f5e4d3c2b1a0', 'Kaelin2026!']);
+  });
+
+  it('does not take ordinary words after a password or a secretary for secrets', () => {
+    assert.deepEqual(found('the password is wrong. Le mot de passe est correct. Secretary: Anna Muster. Token: ok. Pass-Nr.: X1234567', 'SECRET'), []);
+  });
+
+  it('finds usernames after "user=" or "owner=" in logs and URLs (regression: "?owner=petra.vogel")', () => {
+    assert.deepEqual(found('login ok user=kschneider src=192.0.2.1; GET /files?owner=petra.vogel 200; superuser=root', 'USERNAME'), ['kschneider', 'petra.vogel']);
+  });
+
+  it('hides connection strings of any scheme as a whole, with the password in them', () => {
+    assert.deepEqual(found('url: postgresql://portal_admin:Pf8!qLz2xR@10.20.30.40:5432/mandanten, mongodb+srv://u:p@db.example', 'URL'),
+      ['postgresql://portal_admin:Pf8!qLz2xR@10.20.30.40:5432/mandanten', 'mongodb+srv://u:p@db.example']);
+  });
+
+  it('finds case, patient and key numbers in the notations of courts, labs and logs (regression: "ZK 26 318", "P-104233", "N. paziente: 0045821")', () => {
+    const text = 'Geschäftsnummer ZK 26 318; BGer 4A_123/2026; P-104233;Müller; N. paziente: 0045821; Patient-ID 7781; client_id=88213; '
+      + 'GET /clients/4471-ZRH/files; Ihre Akte 2026-ZH-0193';
+    assert.deepEqual(found(text, 'ID'), ['ZK 26 318', '0045821', '7781', '88213', '2026-ZH-0193', 'P-104233', '4471-ZRH', '4A_123/2026']);
+  });
+
+  it('does not take units, status codes or years after a label for IDs (regression: "g/dL 12.0" became an ID)', () => {
+    const text = 'Emoglobina 11.2 g/dL      12.0 - 16.0; status_code=200; a claim for 2026; Dossier von 2026; ICD-10, COVID-19, 5-HT';
+    assert.deepEqual(found(text, 'ID'), []);
+  });
+
+  it('does not take reference ranges in lab reports for phone numbers (regression: "15 - 150")', () => {
+    assert.deepEqual(found('Ferritina 8 µg/L 15 - 150; Natrium 141 mmol/l 135 - 145; Thrombozyten 150 - 400', 'PHONE'), []);
+    assert.deepEqual(found('Tel. 044 555 01 23, (503) 555-0142', 'PHONE'), ['044 555 01 23', '(503) 555-0142']);
+  });
+
+  it('does not join table columns, a calendar week or years into a phone number (regression: "25    96.00", "KW 46 / 2026", "2025-2028", "20261012.4")', () => {
+    const text = '1    SW-2210    25    96.00   2400.00\nKontrolle KW 46 / 2026\n2    Tel.    044 555 01 23\n044 / 555 01 23\nFinanzplanung 2025-2028, Saison 2019/2020, Build 20261012.4';
+    assert.deepEqual(found(text, 'PHONE'), ['044 555 01 23', '044 / 555 01 23']);
+  });
+
+  it('finds Italian tax codes, Swiss company numbers and invoice numbers after "N." (regression: codice fiscale stayed visible)', () => {
+    const text = 'FATTURA N. 2026/0458 - C.F. FMGRRT80A41F205X, Codice fiscale: CLMLSN72C15A794K; UID CHE-123.456.789 MWST';
+    assert.deepEqual(found(text, 'ID'), ['2026/0458', 'FMGRRT80A41F205X', 'CLMLSN72C15A794K', 'CHE-123.456.789']);
+  });
+
+  it('finds a person\'s name after a label for one in forms and records (regression: "Preferred name: Seun")', () => {
+    const text = 'Name: Oluwaseun ADEYEMI-CLARKE\nPreferred name: Seun\nPatient: Herr Reto Ammann, geb. 14.02.1961\n'
+      + 'Pat. : SCHMID Beat , geb . 02 . 11 . 1963\nPrénom : Héloïse\nKlientin: Ursula von Gunten (geb. 1947)\nPatient: Dr. med. Corinne Bachmann';
+    assert.deepEqual(found(text, 'PERSON'), ['Corinne Bachmann', 'Oluwaseun ADEYEMI-CLARKE', 'Seun', 'Herr Reto Ammann', 'SCHMID Beat', 'Héloïse',
+      'Ursula von Gunten', 'Dr. med. Corinne Bachmann']);
+  });
+
+  it('finds a first name and surname after an academic title (regression: "Dr. med. dent. Laurin Hofer", "lic. phil. Rebekka Hauser")', () => {
+    const text = 'Praxis Dr. med. dent. Laurin Hofer; Schulpsychologin: lic. phil. Rebekka Hauser\nProf. Dr. Ueli Baumann-Sommer; MLaw Dario Pfister; '
+      + 'Dr Amelia Ferreira-Hart; Dr. h.c. Margrit Zehnder; Dr. med. Lukas Steiner in 6 Wochen';
+    assert.deepEqual(found(text, 'PERSON'), ['Laurin Hofer', 'Rebekka Hauser', 'Ueli Baumann-Sommer', 'Dario Pfister', 'Amelia Ferreira-Hart', 'Margrit Zehnder',
+      'Lukas Steiner']);
+  });
+
+  it('does not take abbreviations in a sentence or a single word after a title for a name', () => {
+    assert.deepEqual(found('Dr. Steiner hat mich krankgeschrieben; die med. Versorgung Zürich; die pol. Gemeinde Bern', 'PERSON'), []);
+  });
+
+  it('does not take titles, initials, lower-case words or other labels for names', () => {
+    const text = 'Name: Herr\nPatient: H.\nName: siehe Beilage\nDateiname: Bericht.pdf\nUsername: dchen_88\nPatient presented with chest pain';
+    assert.deepEqual(found(text, 'PERSON'), []);
+  });
+
+  it('finds court case numbers, passport and ID card numbers without a label (regression: "HG250117-O", "VB.2026.00321" in a table)', () => {
+    const text = '| Elektro Wyss GmbH | HG250117-O | 19.10.2026 |\n| Fam. Oppliger | VB.2026.00321 |\n| WBE.2026.144 | Incarto 12.2026.45 |\n'
+      + 'Pass X1234567, Identitätskarte E4821937; ISO9001, COVID19, 02.09.2026, Art. 308 ZPO; 04.01_Claim_vs_APH_HG230045.pdf';
+    assert.deepEqual(found(text, 'ID'), ['HG250117-O', 'X1234567', 'E4821937', 'HG230045', 'VB.2026.00321', 'WBE.2026.144', '12.2026.45']);
+  });
+
+  it('finds report numbers with a canton or court between slashes and Italian ID card numbers without a label (regression: "2026/TI/4471", "CA12345BC")', () => {
+    const text = "Rapporto d'incidente 2026/TI/4471; Cause C/18342/2026; carta d'identità CA12345BC; 24/7, km/h, 1/2";
+    assert.deepEqual(found(text, 'ID'), ['CA12345BC', '2026/TI/4471', 'C/18342/2026']);
+  });
+
+  it('finds Swiss postal account numbers without a label (regression: "compte postal (CCP 17-123456-8)")', () => {
+    assert.deepEqual(found('Le compte postal du défunt (CCP 17-123456-8); PC 30-1234-5; 2026-10-14; 3-Gefässerkrankung', 'ID'), ['17-123456-8', '30-1234-5']);
+  });
+
+  it('finds IDs after "n°" (regression: "permis B n° 1234567" stayed visible), and leaves an AHV number after "N° AVS" whole', () => {
+    assert.deepEqual(found('permis B n° 1234567, N° AVS 756.9012.3456.78, Nº 4471', 'ID'), ['756.9012.3456.78', '1234567', '4471']);
+  });
+
+  it('keeps diagnosis codes after "code" (regression: \'code="M54.5"\' became an ID)', () => {
+    assert.deepEqual(found('<diagnosis code="M54.5">Lumbago</diagnosis> Code: F41.1, Code: AB-1234', 'ID'), ['AB-1234']);
+  });
+
+  it('finds Swiss license plates in the usual notations (regression: "SO 77 312")', () => {
+    const text = 'Personenwagen SO 77 312, Kontrollschild ZH 123456, "plate": "LU 145 872", BE-12345; not AI 2026, Akte 2026-ZH-0193, BE 12.5 %';
+    assert.deepEqual(found(text, 'ID').filter((t) => !t.startsWith('2026')), ['BE-12345', 'SO 77 312', 'ZH 123456', 'LU 145 872']);
+  });
+
+  it('finds family names after "Fam.", "famille" or "famiglia" (regression: "Fam. Oppliger")', () => {
+    const text = 'Fam. Oppliger (Peter + Ruth); c/o Famille Rochat-Favre; la famiglia Bernasconi; wir haben der Familie Zeit gegeben';
+    assert.deepEqual(found(text, 'PERSON'), ['Oppliger', 'Rochat-Favre', 'Bernasconi']);
+  });
+
+  it('finds the names of relatives after a word for them (regression: "Ihre Tochter Lea (7)" stayed visible)', () => {
+    const text = 'Ihre Tochter Lea (7) übernachtet bei der Grossmutter. Ehefrau Claudia (Buchhaltung). Sohn Noah und Tochter Lina. '
+      + 'Seine Schwester Monika Schaller-Huber lebt in Kanada. He stays with his brother Vincent in Cranston. Sa fille Nathalie Rochat. mia sorella Federica';
+    assert.deepEqual(found(text, 'PERSON'), ['Vincent', 'Nathalie Rochat', 'Federica', 'Monika Schaller-Huber', 'Lea', 'Claudia', 'Noah', 'Lina']);
+  });
+
+  it('does not take German nouns after a word for a relative, or a noun after the French "son", for names', () => {
+    assert.deepEqual(found('Wir müssen der Mutter Bescheid geben, weil die Tochter Angst hat und der Vater Geld braucht.', 'PERSON'), []);
+    assert.deepEqual(found('Die Mutter gibt dem Sohn Bescheid, wenn sich etwas ändert.', 'PERSON'), []);
+    assert.deepEqual(found('La fondation et son Conseil ont décidé. Her son Mark called.', 'PERSON'), ['Mark']);
+  });
+
+  it('finds a postal code and town on a line of its own or after a comma (regression: "1752 Villars-sur-Glâne" below the street)', () => {
+    const text = 'Monsieur\nJoël Clerc\nRoute de la Glâne 120\n1752 Villars-sur-Glâne\n\nKanzlei, 9001 St. Gallen, 6. Oktober 2026\n  CH-6300 Zug\n'
+      + '3294 Büren an der Aare\n2300 La Chaux-de-Fonds.\nEr ist seit 2014 Mandant. 2014 Mandant seit\n';
+    assert.deepEqual(found(text, 'ADDRESS').filter((t) => /^(?:CH-)?\d/.test(t)), ['1752 Villars-sur-Glâne', '9001 St. Gallen', 'CH-6300 Zug', '3294 Büren an der Aare',
+      '2300 La Chaux-de-Fonds']);
+  });
+
+  it('finds user names in home folder paths and serial numbers after "S/N" (regression: "C:\\Users\\mkeller", "S/N PF3EXAMPLE")', () => {
+    const text = 'Datei C:\\Users\\mkeller\\Documents\\Mandate\\x.docx, /home/anna.meier/.ssh/id_rsa, /Users/rkeller/Desktop; Device S/N PF3EXAMPLE';
+    assert.deepEqual(found(text, 'USERNAME'), ['mkeller', 'anna.meier', 'rkeller']);
+    assert.ok(found(text, 'ID').includes('PF3EXAMPLE'));
   });
 
   it('lists each value once, with the category of the first pattern that finds it', () => {

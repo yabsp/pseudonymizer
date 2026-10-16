@@ -7,3 +7,10 @@ __pycache__/
 
 # other
 .claude
+
+# Desktop build
+node_modules/
+build/
+dist/
+# a .venv link (e.g. in a git worktree) is not matched by ".venv/"
+.venv

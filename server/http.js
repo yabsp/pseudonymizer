@@ -15,17 +15,34 @@ export async function readBody(req) {
   return body;
 }
 
+export class BodyTooLargeError extends Error {}
+
+/** The raw request body; stops reading and throws BodyTooLargeError past maxBytes, so a huge upload can't fill memory. */
+export async function readBytes(req, maxBytes) {
+  const chunks = [];
+  let size = 0;
+  for await (const chunk of req) {
+    size += chunk.length;
+    if (size > maxBytes) throw new BodyTooLargeError(`larger than ${Math.round(maxBytes / 1024 / 1024)} MB`);
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks);
+}
+
 // The Host header check stops DNS rebinding: another site's domain pointed at 127.0.0.1.
 export const isAllowedHost = (req) => ALLOWED_HOSTS.includes(req.headers.host);
 
-/** For requests that change something or start a process. Sends the error and returns true if rejected. */
-export function rejectUnlessFromApp(req, res) {
+/**
+ * For requests that change something or start a process. Sends the error and returns true if rejected.
+ * The type must be one a plain HTML form can't send (JSON, PDF), so other sites can't post here without CORS.
+ */
+export function rejectUnlessFromApp(req, res, type = 'application/json') {
   if (!ALLOWED_ORIGINS.includes(req.headers.origin)) {
     send(res, 403, { error: 'Origin not allowed.' });
     return true;
   }
-  if (!(req.headers['content-type'] || '').startsWith('application/json')) {
-    send(res, 415, { error: 'JSON expected.' });
+  if (!(req.headers['content-type'] || '').startsWith(type)) {
+    send(res, 415, { error: type === 'application/json' ? 'JSON expected.' : `${type} expected.` });
     return true;
   }
   return false;

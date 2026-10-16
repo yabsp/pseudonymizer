@@ -8,26 +8,31 @@ import { isAbort, whileBusy } from './busy.js';
 import { markDetectorReady } from './detector-settings.js';
 import { acceptedExtensions, importDocument } from '../import/index.js';
 import { $, setStatus } from './dom.js';
-import { downloadJson } from './files.js';
+import { downloadFile, downloadJson } from './files.js';
 import { getPrompts } from './prompts-panel.js';
 import { renderMappingTable, renderPreview, renderSnippet, renderSummary } from './render.js';
 import { readSettings } from './settings-store.js';
 import { showTab } from './tabs.js';
 
 // textAtLastDetection === null: not detected yet, so steps 2 and 3 stay hidden and Send is locked.
-// source === null: the text was typed or pasted; otherwise { name, format } of the opened document.
+// source === null: the text was typed or pasted; otherwise { name, format } of the opened file.
+// document === null: the text box is the text; otherwise a PDF sent as an attachment, { file, markdown, pages,
+// images, formulas, formulasConverted, tables }; file stays in this page only, for converting formulas later.
 // selected === null: no placeholder chosen in the preview; otherwise the placeholder shown in valueInfo.
 const state = {
   mapping: [],
   pseudoText: '',
   textAtLastDetection: null,
   source: null,
+  document: null,
   selected: null,
 };
 
+const sourceText = () => state.document?.markdown ?? $('input').value;
+
 const CONFIRM_CLEAR_MS = 4000;
 
-const currentPrompt = () => buildPrompt(state.pseudoText, $('extraPrompt').value);
+const currentPrompt = () => buildPrompt(state.pseudoText, $('extraPrompt').value, { isDocument: state.document !== null });
 
 function showNoModelNotice() {
   const patterns = $('useRegex').checked;
@@ -40,8 +45,8 @@ function showNoModelNotice() {
 }
 
 async function detect(patternsOnly = false) {
-  const text = $('input').value;
-  if (!text.trim()) return setStatus('detectStatus', 'Paste some text first.', true);
+  const text = sourceText();
+  if (!text.trim()) return setStatus('detectStatus', 'Paste some text or open a document first.', true);
   const settings = readSettings();
   const detector = DETECTORS[settings.detector];
   if (!detector) return setStatus('detectStatus', 'Choose a detector under Settings > Detection.', true);
@@ -91,7 +96,7 @@ function updateSendState() {
   const hasDetected = state.textAtLastDetection !== null;
   $('sendBtn').disabled = !hasDetected;
   if (!hasDetected) return setStatus('sendStatus', SEND_HINTS.notDetected);
-  if (state.textAtLastDetection !== $('input').value) return setStatus('sendStatus', SEND_HINTS.textChanged, true);
+  if (state.textAtLastDetection !== sourceText()) return setStatus('sendStatus', SEND_HINTS.textChanged, true);
   const isShowingHint = Object.values(SEND_HINTS).includes($('sendStatus').textContent);
   if (isShowingHint) setStatus('sendStatus', '');
 }
@@ -140,7 +145,7 @@ function keepSelectedVisible() {
 }
 
 function updatePreview() {
-  state.pseudoText = pseudonymize(state.mapping, $('input').value);
+  state.pseudoText = pseudonymize(state.mapping, sourceText());
   renderPreview($('pseudo'), state.pseudoText, showValue);
   renderSnippet($('messageText'), state.pseudoText);
 }
@@ -153,8 +158,43 @@ function updateSteps() {
 }
 
 function showSource() {
-  $('sourceInfo').hidden = !state.source;
+  $('sourceInfo').hidden = !state.source || state.document !== null;
   if (state.source) $('sourceInfo').textContent = `Opened from ${state.source.name}. Only text is read; the file itself is never sent.`;
+}
+
+const plural = (count, one, many) => `${count} ${count === 1 ? one : many}`;
+
+function showDocument() {
+  const doc = state.document;
+  $('input').hidden = doc !== null;
+  $('documentCard').hidden = doc === null;
+  $('partOneTitle').textContent = doc ? 'Your document, with the highlighted values replaced' : 'Your text, with the highlighted values replaced';
+  if (!doc) return;
+  const facts = [plural(doc.pages, 'page', 'pages'), doc.tables && plural(doc.tables, 'table', 'tables'),
+    doc.images && `${plural(doc.images, 'image', 'images')}, not sent`,
+    doc.formulas && (doc.formulasConverted ? `${plural(doc.formulas, 'formula', 'formulas')} as LaTeX` : `${plural(doc.formulas, 'formula', 'formulas')}, not converted`)];
+  $('documentName').textContent = state.source.name;
+  $('documentFacts').textContent = facts.filter(Boolean).join(' · ');
+  const hasUnconverted = doc.formulas > 0 && !doc.formulasConverted;
+  $('formulaNotice').hidden = !hasUnconverted;
+  if (hasUnconverted) $('formulaText').textContent = `${plural(doc.formulas, 'formula is', 'formulas are')} marked but not sent. Converting them to LaTeX takes about a minute each.`;
+  $('documentText').textContent = doc.markdown;
+}
+
+function removeDocument() {
+  state.document = null;
+  state.source = null;
+  showDocument();
+  showSource();
+  setStatus('detectStatus', 'Document removed.');
+  refresh();
+}
+
+function saveAsFile() {
+  if (state.textAtLastDetection === null) return setStatus('sendStatus', SEND_HINTS.notDetected, true);
+  // A neutral file name: the original one often contains a name ("Befund_Hans_Muster.pdf").
+  downloadFile(state.document ? 'pseudonymized-document' : 'pseudonymized-text', 'md', state.pseudoText, 'text/markdown');
+  setStatus('sendStatus', 'Saved part 1 to your download folder. After uploading it to a chat, paste the answer under "Already have an answer" to restore the names.');
 }
 
 export function refresh() {
@@ -176,16 +216,27 @@ export function refresh() {
   updateSteps();
 }
 
-async function openDocument(file) {
+async function openDocument(file, { formulas = false } = {}) {
+  const title = formulas ? 'Converting formulas' : 'Opening ' + file.name;
   try {
-    const { text, source } = await whileBusy('Opening ' + file.name, (signal, progress) => importDocument(file, { signal, progress }));
-    $('input').value = text;
+    const { text, document, source } = await whileBusy(title, (signal, progress) => importDocument(file, { signal, progress, formulas }));
     state.source = source;
+    if (document) {
+      state.document = { file, markdown: text, ...document };
+    } else {
+      state.document = null;
+      $('input').value = text;
+    }
+    showDocument();
     showSource();
-    setStatus('detectStatus', 'Document opened. Find the sensitive values next.');
+    const done = formulas ? 'Formulas converted.' : 'Document opened.';
+    setStatus('detectStatus', state.textAtLastDetection === null || !state.mapping.length
+      ? `${done} Find the sensitive values next.`
+      : `${done} Find the sensitive values again, so values in the new text are found too.`);
     refresh();
   } catch (e) {
-    setStatus('detectStatus', isAbort(e) ? 'Opening cancelled.' : e.message, !isAbort(e));
+    const cancelled = formulas ? 'Converting cancelled. Nothing was changed.' : 'Opening cancelled. Nothing was changed.';
+    setStatus('detectStatus', isAbort(e) ? cancelled : e.message, !isAbort(e));
   }
 }
 
@@ -229,7 +280,7 @@ function clearValues() {
 async function importValues(file) {
   try {
     state.mapping = parseMapping(JSON.parse(await file.text()));
-    state.textAtLastDetection = $('input').value;
+    state.textAtLastDetection = sourceText();
     setStatus('valuesStatus', `Loaded ${state.mapping.length} values from ${file.name}.`);
     refresh();
   } catch (err) {
@@ -265,6 +316,9 @@ export function initWorkflow() {
     updateSendState();
   });
 
+  $('removeDocumentBtn').addEventListener('click', removeDocument);
+  $('convertFormulasBtn').addEventListener('click', () => void openDocument(state.document.file, { formulas: true }));
+  $('saveFileBtn').addEventListener('click', saveAsFile);
   $('keepVisibleBtn').addEventListener('click', keepSelectedVisible);
   $('closeValueInfoBtn').addEventListener('click', () => showValue(null));
   $('exportBtn').addEventListener('click', () => downloadJson('mapping', state.mapping));

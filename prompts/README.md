@@ -3,7 +3,7 @@
 | Purpose | Default (shipped) | Your override (preferred if present) |
 |---|---|---|
 | What GLiNER looks for (labels) | `gliner-labels.default.txt` | `gliner-labels.txt` |
-| Words never sensitive on their own (pronouns, titles, greetings) | `not-sensitive.default.txt` | `not-sensitive.txt` |
+| Words never sensitive on their own (pronouns, titles, greetings, professions, parties, family members, courts without a place, form labels, closing words) | `not-sensitive.default.txt` | `not-sensitive.txt` |
 | What to pseudonymize, for the Ollama detector | `rules.default.md` | `rules.md` |
 | Instructions for the Ollama detector | `detection.default.md` | `detection.md` |
 | Instructions for the target model | `system.default.md` | `system.md` |

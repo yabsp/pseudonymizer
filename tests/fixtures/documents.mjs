@@ -1,6 +1,7 @@
 // Synthetic documents of the app's users (doctors, lawyers, consultants); names, numbers and addresses are
 // invented, domains are .example and the AHV numbers are example numbers. mustHide must not be visible in
 // the prompt that is sent; mustKeep (optional) must reach the model unchanged.
+import { GENERATED_DOCUMENTS } from './generated-documents.mjs';
 
 // No spaces inside a row: for GLiNER every comma, dot and @ is a word (19 per row), and it reads at most 384.
 const CSV_FIRST = ['James', 'Olivia', 'Liam', 'Emma', 'Noah', 'Ava', 'William', 'Sophia', 'Mason', 'Isabella'];
@@ -485,4 +486,5 @@ All logs have been forwarded to our cybersecurity vendor at https://secure.vendo
     ],
     mustKeep: ['Agent: Thank you', 'Customer: Hi', 'Type 2 Diabetes Mellitus', 'ICD-10: E11.9', 'ICD-10: I10', '160/95', '325mg Aspirin', '$412.50', 'Network Engineer'],
   },
+  ...GENERATED_DOCUMENTS,
 ];

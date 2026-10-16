@@ -84,7 +84,7 @@ describe('GLiNER detection endpoint without GLiNER', () => {
     try {
       const res = await server.api('POST', '/api/detect/gliner', { text: 'x', labels: ['person'], model: MODEL });
       assert.equal(res.status, 502);
-      assert.match(res.json().error, /Could not start Python/);
+      assert.match(res.json().error, /Could not start the detection helper/);
       assert.ok(server.isRunning());
     } finally {
       await server.close();

@@ -62,7 +62,7 @@ describe('adding detected values to the mapping', () => {
     assert.deepEqual(mapping, [{ original: 'Project Falcon', placeholder: '[[PROJECT_1]]' }]);
   });
 
-  it('KNOWN GAP: a detected value that differs only in case still hides the text', knownGap('addEntry drops values whose case differs from the text, so the real occurrence stays visible'), () => {
+  it('adds a detected value that differs only in case as the text writes it, so the text is still hidden', () => {
     const mapping = addEntry([], 'reto ammann', 'PERSON', SOURCE);
     assert.equal(mapping.length, 1);
     assert.equal(mapping[0].original, 'Reto Ammann');

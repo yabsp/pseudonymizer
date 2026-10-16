@@ -15,6 +15,12 @@ describe('the prompt that is sent', () => {
     assert.equal(buildPrompt('[[PERSON_1]] was admitted.\n', `  ${extra}\n`), `[[PERSON_1]] was admitted.\n\n${extra}`);
   });
 
+  it('sends a document between markers, without its file name, before the question', () => {
+    const prompt = buildPrompt('## Befund\n[[PERSON_1]] was admitted.\n', 'Summarise it.', { isDocument: true });
+    assert.equal(prompt, 'Attached document, converted from PDF to Markdown. Images and unconverted formulas are marked and were not sent.\n<document>\n## Befund\n[[PERSON_1]] was admitted.\n</document>\n\nSummarise it.');
+    assert.equal(buildPrompt('', 'Question only', { isDocument: true }), 'Question only');
+  });
+
   it('leaves out empty parts', () => {
     assert.equal(buildPrompt('[[PERSON_1]] was admitted.', '   \n'), '[[PERSON_1]] was admitted.');
     assert.equal(buildPrompt('  ', 'Question only'), 'Question only');

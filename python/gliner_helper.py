@@ -14,6 +14,8 @@ except ImportError as e:
 #   \w+(?:[-_]\w+)*  letters/digits/"_", possibly joined by "-" or "_" ("2021-03-15", "Jean-Luc")
 #   |\S              or any other single non-space character (",", ".", "@")
 WORD = re.compile(r'\w+(?:[-_]\w+)*|\S')
+# An underscore between two letters or digits ([^\W_] is \w without "_"): "Carla_Imhof", "Kaelin_Erich_2026".
+UNDERSCORE_IN_WORD = re.compile(r'(?<=[^\W_])_(?=[^\W_])')
 
 # GLiNER reads at most 384 words and silently drops the rest; the labels take part of that room.
 # 150-word windows still find every name in dense CSV rows with 23 labels (200 did not, see tests/model).
@@ -56,12 +58,24 @@ def windows(text):
 def detect_with_gliner(text, request):
     model = get_model(request['model'])
     best_by_span = {}
-    for start, end in windows(text):
-        for e in predict(model, text[start:end], request['labels'], request.get('threshold', 0.4)):
+
+    def read(reading, start, end):
+        for e in predict(model, reading[start:end], request['labels'], request.get('threshold', 0.4)):
             span = (start + e['start'], start + e['end'])
             if span not in best_by_span or e['score'] > best_by_span[span]['score']:
                 best_by_span[span] = {'text': text[span[0]:span[1]], 'label': e['label'], 'start': span[0], 'end': span[1],
                                       'score': round(e['score'], 3), 'source': 'gliner'}
+
+    for start, end in windows(text):
+        read(text, start, end)
+    # GLiNER reads "Vertrag_Mueller_Brandenberger.pdf" as one word and never finds the names in it. The windows
+    # with such underscores are read again with spaces instead; a space replaces each one, so the offsets and the
+    # values taken from the original text stay right ("Mueller_Brandenberger").
+    spaced = UNDERSCORE_IN_WORD.sub(' ', text)
+    if spaced != text:
+        for start, end in windows(spaced):
+            if spaced[start:end] != text[start:end]:
+                read(spaced, start, end)
     return sorted(best_by_span.values(), key=lambda e: e['start'])
 
 
@@ -103,4 +117,9 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    # The desktop app bundles this file as its one Python program; with --extract-document it reads a PDF instead.
+    if sys.argv[1:2] == ['--extract-document']:
+        import document_extraction
+        document_extraction.main(sys.argv[2:])
+    else:
+        main()

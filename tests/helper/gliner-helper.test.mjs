@@ -38,6 +38,7 @@ describe('GLiNER helper', () => {
   let helper;
   const entities = Object.fromEntries(Object.values(NAMES).map((n) => [n, ['person', 0.9]]));
   entities['Müller-Lüdenscheidt'] = ['person', 0.9];
+  entities['Carla Imhof'] = ['person', 0.9];
   before(() => { helper = startHelper(entities, { FAKE_GLINER_MAX_WORDS: '200' }); });
   after(() => helper.close());
 
@@ -56,6 +57,13 @@ describe('GLiNER helper', () => {
     const text = '🍀🙂 Café: Frau Müller-Lüdenscheidt 👩‍⚕️ und Reto Ammann.';
     const answer = await helper.send({ id: 3, text, labels: ['person'], model: MODEL });
     assert.deepEqual(answer.entities.map((e) => e.text), ['Müller-Lüdenscheidt', 'Reto Ammann']);
+    for (const e of answer.entities) assert.equal(codePoints(text, e.start, e.end), e.text);
+  });
+
+  it('finds names joined by underscores in file names, with offsets into the original text (regression: "Severance_Agreement_Carla_Imhof.pdf")', async () => {
+    const text = '02.04_Severance_Agreement_Carla_Imhof_signed.pdf, sent by Reto Ammann to Carla Imhof';
+    const answer = await helper.send({ id: 8, text, labels: ['person'], model: MODEL });
+    assert.deepEqual(answer.entities.map((e) => e.text), ['Carla_Imhof', 'Reto Ammann', 'Carla Imhof']);
     for (const e of answer.entities) assert.equal(codePoints(text, e.start, e.end), e.text);
   });
 

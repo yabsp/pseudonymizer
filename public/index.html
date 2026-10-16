@@ -44,12 +44,31 @@
     <section class="card step" id="textCard">
       <div class="step-head">
         <span class="num">1</span>
-        <h2>Your text</h2>
+        <h2>Your text or document</h2>
         <button type="button" class="ghost small" id="loadFileBtn">Open file</button>
         <input type="file" id="inputFile" hidden>
       </div>
       <div class="drop-zone" id="dropZone">
-        <textarea id="input" rows="10" aria-label="Your text" placeholder="Paste the text that contains sensitive values, or drop a file here. Your question can go here too, or later in step 3."></textarea>
+        <textarea id="input" rows="10" aria-label="Your text" placeholder="Paste the text that contains sensitive values, or drop a file here (text or PDF). Your question can go here too, or later in step 3."></textarea>
+        <div id="documentCard" class="document-card" hidden>
+          <div class="document-head">
+            <svg class="document-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h8l5 5v15H6z"/><path d="M14 2v5h5"/></svg>
+            <div class="document-text">
+              <p id="documentName" class="document-name"></p>
+              <p id="documentFacts" class="document-facts"></p>
+            </div>
+            <button type="button" class="ghost small" id="removeDocumentBtn">Remove</button>
+          </div>
+          <p id="formulaNotice" class="document-notice" hidden>
+            <span id="formulaText"></span>
+            <button type="button" class="ghost small" id="convertFormulasBtn">Convert formulas</button>
+          </p>
+          <p class="hint document-hint">Only the extracted text is used. The PDF itself, its images and hidden details (author, comments, attachments) are never sent.</p>
+          <details class="more">
+            <summary>Show extracted text</summary>
+            <pre id="documentText" class="output"></pre>
+          </details>
+        </div>
         <div class="drop-hint" aria-hidden="true">Drop the file to open it</div>
       </div>
       <p id="sourceInfo" class="hint source" hidden></p>
@@ -112,7 +131,7 @@
       <p class="hint">The AI model receives one message made of these two parts. Nothing else leaves this computer.</p>
       <div class="message" aria-label="The message that will be sent">
         <div class="message-part">
-          <p class="part-title"><span class="part-num">1</span> Your text, with the highlighted values replaced</p>
+          <p class="part-title"><span class="part-num">1</span> <span id="partOneTitle">Your text, with the highlighted values replaced</span></p>
           <p id="messageText" class="snippet"></p>
           <p class="part-note">The full text is shown in step 2.</p>
         </div>
@@ -126,9 +145,10 @@
       <div class="actions">
         <button type="button" id="sendBtn">Send to <span id="targetName" class="target-name">the AI model</span></button>
         <button type="button" class="ghost" data-copy="prompt">Copy message</button>
+        <button type="button" class="ghost" id="saveFileBtn">Save as file</button>
         <span id="sendStatus" class="status" role="status"></span>
       </div>
-      <p class="hint after">The answer appears in step 4, with the original values put back in.</p>
+      <p class="hint after">The answer appears in step 4, with the original values put back in. "Save as file" saves part 1 as a Markdown file, for uploading to a chat yourself.</p>
       <button type="button" class="link" id="pasteAnswerBtn">Already have an answer from another chat? Restore it</button>
     </section>
 

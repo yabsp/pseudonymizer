@@ -1,7 +1,9 @@
 import { PDF_IMPORTER } from './pdf.js';
 import { TEXT_IMPORTER } from './text.js';
 
-// One importer per document format: { label, extensions, read(file, { signal, progress }) -> { text } }.
+// One importer per document format: { label, extensions, read(file, options) -> { text, document? } }, with options
+// { signal, progress } and format-specific ones (formulas for PDF). document (optional) holds facts about a
+// document that is sent as an attachment: { pages, images, formulas, formulasConverted, tables }.
 // A new format (e.g. Word) is one file and one entry here.
 export const IMPORTERS = [TEXT_IMPORTER, PDF_IMPORTER];
 
@@ -20,6 +22,6 @@ export async function importDocument(file, options = {}) {
     const known = IMPORTERS.map((i) => i.label).join(', ');
     throw new Error(`"${file.name}" can't be opened here (supported: ${known}). Copy its text and paste it instead.`);
   }
-  const { text } = await importer.read(file, options);
-  return { text, source: { name: file.name, format: importer.label } };
+  const { text, document = null } = await importer.read(file, options);
+  return { text, document, source: { name: file.name, format: importer.label } };
 }

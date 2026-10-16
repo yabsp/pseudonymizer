@@ -1,5 +1,6 @@
 {
   "name": "pseudonymizer",
+  "version": "0.1.0",
   "private": true,
   "description": "Local pseudonymization of sensitive values before text is sent to an AI model",
   "type": "module",
@@ -11,6 +12,62 @@
     "test": "node --test \"tests/**/*.test.mjs\"",
     "test:strict": "STRICT_KNOWN_GAPS=1 node --test \"tests/**/*.test.mjs\"",
     "test:model": "RUN_MODEL_TESTS=1 node --test tests/model/detection-eval.test.mjs",
-    "check": "for f in server/*.js $(find public/js -name '*.js'); do node --check \"$f\" || exit 1; done && python3 -m py_compile python/*.py"
-  }
+    "check": "for f in server/*.js desktop/*.js desktop/*.mjs $(find public/js -name '*.js'); do node --check \"$f\" || exit 1; done && python3 -m py_compile python/*.py",
+    "desktop": "node desktop/run-dev.mjs",
+    "build:helper": "node desktop/build-helper.mjs",
+    "build:models": "node desktop/build-models.mjs",
+    "dist:linux": "npm run build:helper && npm run build:models && electron-builder --linux AppImage",
+    "dist:win": "npm run build:helper && npm run build:models && electron-builder --win nsis"
+  },
+  "devDependencies": {
+    "electron": "44.8.0",
+    "electron-builder": "26.15.3"
+  },
+  "main": "desktop/main.js",
+  "build": {
+    "appId": "app.pseudonymizer.desktop",
+    "productName": "Pseudonymizer",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "package.json",
+      "desktop/main.js",
+      "desktop/icons/**",
+      "server/**",
+      "public/**",
+      "config/**",
+      "prompts/*.default.*",
+      "prompts/README.md"
+    ],
+    "extraResources": [
+      {
+        "from": "build/helper",
+        "to": "helper"
+      },
+      {
+        "from": "build/models",
+        "to": "models"
+      }
+    ],
+    "asar": true,
+    "linux": {
+      "target": "AppImage",
+      "category": "Office",
+      "icon": "desktop/icons/icon.png",
+      "artifactName": "${productName}-${version}-${arch}.${ext}",
+      "syncDesktopName": true
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "desktop/icons/icon.ico",
+      "artifactName": "${productName}-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  },
+  "desktopName": "pseudonymizer.desktop"
 }

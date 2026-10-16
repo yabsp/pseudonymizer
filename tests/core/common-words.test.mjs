@@ -27,6 +27,8 @@ describe('words that are never sensitive on their own', () => {
       'Lukas Meier', 'Frau Bachmann', 'Herr Reto Ammann', 'Dr. med. Corinne Bachmann', 'Monsieur Perret',
       'la signora Giulia Pedrazzini', 'Mr. Smith', 'olivia.johnson', 'Emma,Brown', 'jdoe', 'Aare Bank AG',
       'Kramgasse 12, 3011 Bern', 'Patient 4711', 'Klient Nr. 88', '756.1234.5678.97',
+      // surnames that are also ordinary words
+      'Herr Born', 'Mr. Child', 'Frau Arzt', 'Herr Bruder', 'Ms. Court', 'Herr Kind',
     ];
     for (const value of real) assert.ok(!isOnlyCommonWords(value, COMMON_WORDS), value);
   });
@@ -97,6 +99,38 @@ describe('parts of found names and short forms', () => {
     assert.equal(pseudonymize(mapping, text), '[[PERSON_1]] and [[PERSON_2]]. Later [[PERSON_3]] called.');
   });
 
+  it('hides each name of a double name used alone, with the placeholder of the full name (regression: "Frau Gerber" after "Nadine Gerber-Kunz")', () => {
+    const text = 'Klientin: Nadine Gerber-Kunz. Frau Gerber berichtet, Nadine Gerber sei müde. Gegen Bruno Wüthrich-Studer; Herr Wüthrich bestreitet.';
+    const mapping = detect(text, [['Nadine Gerber-Kunz', 'PERSON'], ['Bruno Wüthrich-Studer', 'PERSON']]);
+    assert.equal(pseudonymize(mapping, text), 'Klientin: [[PERSON_1]]. Frau [[PERSON_1]] berichtet, [[PERSON_1]] sei müde. Gegen [[PERSON_2]]; Herr [[PERSON_2]] bestreitet.');
+    assert.equal(restore(mapping, '[[PERSON_1]]').text, 'Nadine Gerber-Kunz');
+  });
+
+  it('gives a name found separately the placeholder of the double name it belongs to', () => {
+    const text = 'Hans-Peter Müller-Lüdenscheid kam. Hans-Peter blieb, Herr Müller ging.';
+    const mapping = detect(text, [['Hans-Peter Müller-Lüdenscheid', 'PERSON'], ['Herr Müller', 'PERSON']]);
+    assert.equal(pseudonymize(mapping, text), '[[PERSON_1]] kam. [[PERSON_1]] blieb, [[PERSON_1]] ging.');
+  });
+
+  it('splits a value across lines into lines, so a greeting stays and each line is hidden where it stands alone (regression: "Cher Confrère")', () => {
+    const text = 'Médecin traitant : Dr Olivier Jaquier\nCabinet de la Place\n\nCher Confrère,\n\nle Cabinet de la Place nous a adressé...';
+    const mapping = detect(text, [['Cabinet de la Place\n\nCher Confrère', 'COMPANY'], ['Olivier Jaquier', 'PERSON']]);
+    assert.equal(pseudonymize(mapping, text), 'Médecin traitant : Dr [[PERSON_1]]\n[[COMPANY_1]]\n\nCher Confrère,\n\nle [[COMPANY_1]] nous a adressé...');
+  });
+
+  it('hides a value written in capitals or in title case elsewhere, with the same placeholder (regression: "Me Berset-Rapin" after "CLAUDINE BERSET-RAPIN")', () => {
+    const text = 'MAÎTRE CLAUDINE BERSET-RAPIN, AVOCATE\nMe Berset-Rapin vous écrit. Reto Ammann, REF: RETO AMMANN. Laptop PC-MKELLER-01 of mkeller. Lea, LEA.';
+    const mapping = detect(text, [['MAÎTRE CLAUDINE BERSET-RAPIN', 'PERSON'], ['Reto Ammann', 'PERSON'], ['mkeller', 'USERNAME'], ['Lea', 'PERSON']]);
+    assert.equal(pseudonymize(mapping, text), '[[PERSON_1]], AVOCATE\nMe [[PERSON_1]] vous écrit. [[PERSON_2]], REF: [[PERSON_2]]. Laptop PC-[[USERNAME_1]]-01 of [[USERNAME_1]]. [[PERSON_3]], [[PERSON_3]].');
+    assert.equal(restore(mapping, '[[PERSON_1]] / [[PERSON_2]]').text, 'MAÎTRE CLAUDINE BERSET-RAPIN / Reto Ammann');
+  });
+
+  it('does not hide other words in lower case, or short values in title case', () => {
+    const text = 'Herr Keller lagert den Wein im Weinkeller. Mia Sutter: mia sorella. Team IT, It works.';
+    const mapping = detect(text, [['Keller', 'PERSON'], ['Mia Sutter', 'PERSON'], ['IT', 'COMPANY']]);
+    assert.equal(pseudonymize(mapping, text), 'Herr [[PERSON_1]] lagert den Wein im Weinkeller. [[PERSON_2]]: mia sorella. Team [[COMPANY_1]], It works.');
+  });
+
   it('hides a short form in brackets where it is used alone', () => {
     const text = 'eingeliefert ins Universitätsspital Zürich (USZ). Beilage: Arztzeugnis USZ.';
     const mapping = detect(text, [['Universitätsspital Zürich (USZ)', 'COMPANY']]);
@@ -117,6 +151,18 @@ describe('roles and job titles', () => {
     const detected = [['Agent', 'PERSON'], ['Marcus Webb', 'PERSON'], ['admin', 'PERSON'], ['Daniel Okafor', 'PERSON'], ['Network Engineer', 'PERSON']];
     const mapping = addDetected([], detected.map(([value, category]) => ({ text: value, category })), text, COMMON_WORDS);
     assert.equal(pseudonymize(mapping, text), 'Agent: [[PERSON_1]]. The admin administered it. [[PERSON_2]], Network Engineer, IT Security & Network Breach Log.');
+  });
+
+  it('include professions, header labels, form labels and closing words (regression: "Avocate et notaire", "Cordialement", "Data di nascita")', () => {
+    for (const value of ['Avocate', 'Rechtsanwältin', 'Oberarzt', 'Hausarzt', 'Sekretariat', 'Natel', 'Geschädigte', 'Klägerin', 'recourante', 'Vater', 'Ehefrau', 'Kinder', 'fille', 'geb.', 'née', 'FMH', 'FSM', 'Cc', 'Tél', 'Cordialement', 'Freundliche Grüsse', 'Distinti saluti', 'Merci', 'Grüezi', 'Data', 'Nome', 'INFO']) {
+      assert.ok(isOnlyCommonWords(value, COMMON_WORDS), value);
+    }
+    for (const value of ['Me Claire Rochat', 'Dr. med. Lukas Steiner', 'Data Quest AG']) assert.ok(!isOnlyCommonWords(value, COMMON_WORDS), value);
+  });
+
+  it('include courts and authorities without a place, but not with one (regression: "Tribunal des baux" became a company)', () => {
+    for (const value of ['Tribunal des baux', 'Bundesgericht', 'Polizia cantonale', 'Cour d\'appel']) assert.ok(isOnlyCommonWords(value, COMMON_WORDS), value);
+    for (const value of ['Bezirksgericht Zürich', 'Kantonspolizei Solothurn', 'Tribunal de Lausanne']) assert.ok(!isOnlyCommonWords(value, COMMON_WORDS), value);
   });
 
   it('do not hide user names and addresses that contain them (regression: "bw_dataroom_admin")', () => {
@@ -143,6 +189,20 @@ describe('adding detected values', () => {
     const mapping = addDetected([], detected, text, COMMON_WORDS);
     assert.deepEqual(mapping, [{ original: 'Lukas Meier', placeholder: '[[PERSON_1]]' }]);
     assert.equal(pseudonymize(mapping, text), 'möchte ich Sie über wichtige Dinge informieren. Ich bitte Sie, mir zu schreiben. Mein Name: [[PERSON_1]].');
+  });
+
+  it('drops diagnosis codes a detector took for record numbers (regression: "M54.5" was hidden)', () => {
+    const text = 'Patient 0081234, Diagnose M54.5 Lumbago, ICD-10: F41.1';
+    const detected = [{ text: 'M54.5', category: 'ID' }, { text: 'ICD-10: F41.1', category: 'ID' }, { text: '0081234', category: 'ID' }];
+    const mapping = addDetected([], detected, text, COMMON_WORDS);
+    assert.deepEqual(mapping.map((m) => m.original), ['0081234']);
+  });
+
+  it('drops Roman numerals a detector took for names (regression: "II" hid "Grad II" and "grade II")', () => {
+    const text = 'entorse de la cheville droite, grade II / OSG-Distorsion rechts, Grad II; NYHA III; Herr Ivo Xaver; Kalium 3.5';
+    const detected = ['II', 'III', 'IV', 'Ivo Xaver'].map((value) => ({ text: value, category: 'PERSON' }));
+    assert.equal(pseudonymize(addDetected([], detected, text, COMMON_WORDS), text),
+      'entorse de la cheville droite, grade II / OSG-Distorsion rechts, Grad II; NYHA III; Herr [[PERSON_1]]; Kalium 3.5');
   });
 
   it('still checks that values appear in the text', () => {

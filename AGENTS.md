@@ -18,11 +18,15 @@ When a situation is not covered here, decide based on which option better serves
 runtime:
   node: ">= 22"                  # server and browser code use only built-in APIs
   python: "3.12, in .venv"       # only for the detection helper (GLiNER, Presidio)
+  electron: "44, desktop app only" # desktop/main.js runs the unchanged server in Electron
 package_manager:
-  javascript: none               # zero npm dependencies by design; package.json only holds the commands
+  javascript: none at runtime    # zero runtime dependencies by design; devDependencies are build tools only
+                                 # (electron, electron-builder, pinned exactly) for the desktop app
   python: pip inside .venv       # never install into the system Python; versions in python/requirements.txt
 commands:
   run:         npm start                # http://localhost:8091, change with PORT=...
+  desktop:     npm run desktop          # the desktop app from the project folder (needs npm install)
+  dist:        npm run dist:linux       # AppImage in dist/; dist:win on Windows (helper via PyInstaller, model bundled)
   setup:       see README, section "Detection with GLiNER"
   check:       npm run check            # syntax of every JS file and the Python helper
   test:        npm test                 # fast suite with fakes, about 1 s
@@ -34,6 +38,7 @@ stack:
   backend:   server/, ES modules, Node built-ins only (http, fs, child_process)
   detection: GLiNER (python/gliner_helper.py, JSON lines over stdio), optionally plus Presidio with spaCy
              (python/presidio_detection.py, same helper), Ollama (HTTP), regex patterns
+  documents: PDF to Markdown with Docling (python/document_extraction.py, one process per file), not yet in the desktop app
   targets:   local CLIs only (Claude Code, Codex, Gemini CLI) via config/adapters.json; API targets parked in parked/
   storage:   settings.json (mode 0600) plus a localStorage copy; no database
   prompts:   prompts/<name>.md overrides prompts/<name>.default.md
@@ -113,20 +118,25 @@ public/                   # Served to the browser (the only static root, plus pr
                           #   chunking.js, prompt.js (buildPrompt, findMappedValues)
   js/detection/           #   gliner.js, gliner-labels.js (reads prompts/gliner-labels*.txt), presidio.js, ollama.js;
                           #   index.js registers them in DETECTORS
-  js/import/              #   document importers: index.js (IMPORTERS registry, importDocument), text.js, pdf.js (planned)
+  js/import/              #   document importers: index.js (IMPORTERS registry, importDocument), text.js, pdf.js
   js/targets/             #   cli.js: sends the prompt through the server to a CLI
   js/ui/                  #   dom, tabs, theme, busy overlay, settings (store, detector, target, panel),
                           #   prompts panel, render, files, workflow (the four steps and their state)
   js/server-api.js        #   calls to the local server
 server/                   # index.js (route table, listen), config.js (env and paths), http.js,
-                          # static.js, settings.js, cli.js (CLI bridge), gliner.js (GLiNER bridge)
+                          # static.js, settings.js, cli.js (CLI bridge), gliner.js (GLiNER bridge),
+                          # documents.js (PDF extraction), about.js
 python/                   # gliner_helper.py (long-lived, JSON lines over stdio), presidio_detection.py (the only
-                          # file that uses Presidio and spaCy), requirements.txt
+                          # file that uses Presidio and spaCy), document_extraction.py (the only file that uses
+                          # Docling; one process per PDF), requirements.txt
+desktop/                  # main.js (Electron: search path, data folder, bundled helper and model, lock-down),
+                          # run-dev.mjs, build-helper.mjs (PyInstaller), build-models.mjs, icons/
 config/adapters.json      # CLI adapters (command, args, stdin template)
 prompts/                  # Prompt files and GLiNER labels; <name>.<ext> overrides <name>.default.<ext>
 tests/                    # core/, server/, helper/, model/, fixtures/, helpers/ (Section 8)
 docs/architecture.md      # How the parts fit together (keep it up to date)
 docs/adr/                 # Architecture decisions
+docs/todo.md              # Planned work and open decisions (keep it current)
 parked/                   # Code not enabled yet (API targets), not served
 ```
 
@@ -138,13 +148,13 @@ parked/                   # Code not enabled yet (API targets), not served
 - **UI modules own their part of the page:** each has an `init…` function that wires its controls; `main.js` only calls them. Workflow state lives in the `state` object in `ui/workflow.js`; settings are read from the form with `readSettings()`.
 - **Prefer functions and composition** over classes, matching the existing code.
 
-### Planned: PDF import
-- Extract text locally (pdf.js vendored in the repo, loaded only when a PDF is opened). Scanned PDFs need local OCR; never a cloud OCR service.
-- The entry point exists: `public/js/import/pdf.js` is registered in `IMPORTERS` and currently explains that PDFs aren't supported yet. Implement it there; the workflow already opens files through `importDocument` (file picker and drag and drop) inside `whileBusy`, so `read(file, { signal, progress })` can report progress and be cancelled.
-- Run the extracted text through the same detection, review and replacement steps as pasted text. No separate shortcut path.
-- **Never send or upload the original PDF bytes.** Build the outgoing document from the pseudonymized text only. A PDF can leak through metadata (author, title, XMP), annotations, form fields, attachments, embedded images and hidden text layers, so anything not rebuilt from pseudonymized text must be dropped.
-- Show the user what will be uploaded before it is sent, as with text prompts.
-- Large documents can take long: process them in chunks with progress in the busy overlay, and keep the page responsive.
+### PDF documents
+- The page uploads a PDF only to the local server (`POST /api/extract/pdf`, `public/js/import/pdf.js`); `server/documents.js` writes it to a private temporary folder, runs `python/document_extraction.py` (Docling, the only file that uses it) in a separate process that is killed on cancel or timeout, and deletes the folder in every case.
+- Extraction is local only: `enable_remote_services` and external plugins stay off, models come from `~/.cache/docling/models` (or `DOCLING_ARTIFACTS_PATH`), and nothing is downloaded at run time. Scanned pages and text in images are read with local OCR (RapidOCR); never a cloud OCR service.
+- The result is Markdown (headings, tables, formulas as LaTeX when the user asks for conversion) and goes through the same detection, review and replacement steps as pasted text. No separate shortcut path.
+- **Never send or upload the original PDF bytes.** Only the pseudonymized Markdown goes on, inside the message (`buildPrompt(..., { isDocument: true })`) or as a file the user saves. Images are replaced by `[Image N, page P: not sent]`, unconverted formulas by `[Formula N, page P: not converted]`; metadata, annotations, form fields and attachments are not part of the Markdown. Text Docling reads anywhere (also hidden layers or text in images) is in the Markdown, so it is detected and shown in the review like everything else.
+- The original file name is never sent or used for saved files; it often contains a name.
+- Show the user what will be sent before it is sent, as with text prompts.
 
 ---
 
@@ -204,7 +214,7 @@ Tests use Node's built-in runner (`node:test`), no framework:
 | Privacy core (`public/js/core/`) | `tests/core/`, importing through `tests/helpers/core.mjs` |
 | Server routes, static files, settings, CLI or GLiNER bridge | `tests/server/`, using `startServer()` from `tests/helpers/server.mjs`, which runs a temporary copy of the project with fakes (`tests/fixtures/fake-cli.mjs`, `tests/fixtures/fake_gliner/`) |
 | Python helper protocol | `tests/helper/` |
-| Detection quality | `tests/model/` (real GLiNER, opt-in) and the documents in `tests/fixtures/documents.mjs` |
+| Detection quality | `tests/model/` (real GLiNER, opt-in) and the documents in `tests/fixtures/documents.mjs` (which includes `generated-documents.mjs`) |
 | Document importers (`public/js/import/`) | `tests/import/` (Node has `File`, so importers run without a browser) |
 | UI | not automated yet; verify in the browser (Section 2, step 7) |
 
@@ -223,7 +233,7 @@ Rules:
 ## 9. Configuration & Secrets
 
 - User settings live in `settings.json` (written by `server/settings.js` with mode 0600) and a localStorage copy. Add a new setting to `SETTING_FIELDS` in `ui/settings-store.js` and to the Settings tab; settings save automatically.
-- Server configuration comes from environment variables, read and validated once in `server/config.js` (`PORT`, `GLINER_PYTHON`); the server refuses to start with invalid values. Never read `process.env` elsewhere. Document new ones in the README in the same change.
+- Server configuration comes from environment variables, read and validated once in `server/config.js` (`PORT`, `GLINER_PYTHON`, `PSEUDONYMIZER_DATA_DIR`, `DETECTION_HELPER`, `PSEUDONYMIZER_APP`); the server refuses to start with invalid values. Never read `process.env` elsewhere, except in `desktop/main.js`, which sets these variables before it starts the server. Document new ones in the README in the same change.
 - `settings.json` and `.venv/` are never committed (see `.gitignore`). `settings.json` is never served as a static file.
 - Never put secrets in prompts, `config/adapters.json`, the README or examples.
 
@@ -286,7 +296,8 @@ The app is single-user and local. Keep it that way:
 
 ## 15. Dependencies
 
-- Zero npm dependencies is a deliberate property: easy to audit and nothing to `npm install`. Adding one needs the user's approval.
+- Zero runtime npm dependencies is a deliberate property: easy to audit, and `npm start` needs no `npm install`. The only devDependencies are the desktop build tools (Electron, electron-builder), pinned exactly and never imported by `server/` or `public/`. Adding any dependency needs the user's approval.
+- The desktop app must stay offline: models are bundled and loaded with `HF_HUB_OFFLINE=1`, and `desktop/main.js` blocks every request from the window that doesn't go to this machine. Check new Electron or Chromium features for background downloads (the spell checker fetched dictionaries from Google until it was switched off).
 - Prefer platform APIs (`fetch`, `URL`, `AbortController`, `crypto.randomUUID`, `Intl`, Node built-ins).
 - Browser libraries are vendored into the repo with their version and licence noted, never loaded from a CDN.
 - Python packages go into `.venv` only, pinned in `python/requirements.txt`.
