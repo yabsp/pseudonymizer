@@ -122,6 +122,7 @@ electron-builder (`package.json` `build`; only `prompts/*.default.*` are packed)
 | Component | Licence | Notes |
 |---|---|---|
 | GLiNER `urchade/gliner_multi_pii-v1` | Apache-2.0 | 1.1 GB; tokenizer of `microsoft/mdeberta-v3-base` (MIT) |
+| Swiss place names (`public/js/core/swiss-places.js`) | swisstopo free geodata, "Open use. Must provide the source." | credit "© swisstopo" at the bottom of Settings; ADR 0007 |
 | Presidio | MIT | spaCy models: de, en MIT; fr LGPL-LR; it CC BY-NC-SA 3.0 (non-commercial, to be removed) |
 | Docling | MIT | layout Apache-2.0; tables and CodeFormulaV2 CDLA-Permissive-2.0; RapidOCR Apache-2.0 |
 | ONNX Runtime, onnx | MIT, Apache-2.0 | ONNX Runtime also lists `AzureExecutionProvider` (cloud): never used |
