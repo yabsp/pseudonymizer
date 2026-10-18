@@ -96,6 +96,10 @@ jobs:
           $VENV_PYTHON -m pip install --upgrade pip
           $VENV_PYTHON -m pip install $TORCH --index-url $TORCH_CPU_INDEX
           $VENV_PYTHON -m pip install -r python/requirements.txt pyinstaller
+          # The spaCy models the app ships for Presidio (MIT, LGPL-LR); never the Italian one (non-commercial).
+          $VENV_PYTHON -m spacy download de_core_news_lg
+          $VENV_PYTHON -m spacy download fr_core_news_lg
+          $VENV_PYTHON -m spacy download en_core_web_lg
       - uses: ./.github/actions/models
       - run: npm ci
       - name: Build
@@ -135,6 +139,7 @@ jobs:
           .venv/Scripts/python.exe -m pip install -r python/requirements.txt
           .venv-gpu/Scripts/python.exe -m pip install $TORCH --index-url $TORCH_CUDA_INDEX
           .venv-gpu/Scripts/python.exe -m pip install -r python/requirements.txt pyinstaller
+          for model in de_core_news_lg fr_core_news_lg en_core_web_lg; do .venv-gpu/Scripts/python.exe -m spacy download $model; done
       - uses: ./.github/actions/models
       - run: npm ci
       - name: Build
