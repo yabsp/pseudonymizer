@@ -33,7 +33,7 @@ doesn't fit the CPU build of PyTorch and stops GLiNER from loading.
 ## Detection with Presidio
 The default detector is GLiNER + Presidio: Presidio adds a second name finder (spaCy) and checks for phone, card
 and bank numbers; it finds more but also lists more words that aren't sensitive. After GLiNER, download a language
-model per language you need (without them, choose GLiNER alone in Settings; the desktop app always uses GLiNER):
+model per language you need (without them, choose GLiNER alone in Settings; the desktop app ships German, French and English):
 ```
 .venv/bin/python -m spacy download de_core_news_lg    # German, MIT, about 600 MB
 .venv/bin/python -m spacy download fr_core_news_lg    # French, LGPL-LR, about 600 MB

@@ -17,8 +17,8 @@ Pseudonymization is only as good as detection: always look at the highlighted pr
 **Desktop app** (Linux, Windows): download it, start it, done. It brings everything it needs, also for PDFs.
 - Linux: make `Pseudonymizer-<version>-x86_64.AppImage` executable (right click > Properties > "Allow executing",
   or `chmod +x`) and start it.
-- Windows: unpack `Pseudonymizer-<version>-win-x64.zip` into a folder of your choice (about 3.5 GB) and start
-  `Pseudonymizer.exe`. With an NVIDIA graphics card, take the `-GPU` version instead (about 6 GB, much faster for
+- Windows: unpack `Pseudonymizer-<version>-win-x64.zip` into a folder of your choice (about 5.3 GB) and start
+  `Pseudonymizer.exe`. With an NVIDIA graphics card, take the `-GPU` version instead (about 7.6 GB, much faster for
   PDFs with formulas). Without a code signature, Windows shows a warning ("More info" > "Run anyway"). On the
   first start the app adds itself to the Start menu, which Windows needs for its notifications. To remove it,
   delete the folder and the Start menu entry.
@@ -60,8 +60,8 @@ processor, under a second with an NVIDIA graphics card).
   model (about 10 seconds).
 - Swiss towns are hidden also without a postal code ("aus Hochdorf"); a court's seat ("Bezirksgericht Hochdorf")
   stays readable unless the town also appears elsewhere in the text.
-- The desktop app doesn't offer Presidio yet. Prompt changes are kept with "Save" in the
-  Prompts tab.
+- Presidio reads German, French and English; an Italian text is reported, as there is no Italian language model
+  for commercial use. Prompt changes are kept with "Save" in the Prompts tab.
 - Planned: reusable value lists.
 
 ## For developers and AI agents

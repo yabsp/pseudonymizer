@@ -39,7 +39,7 @@ Read and validated in `server/config.js` only (except `desktop/main.js`, which s
 | `GLINER_PYTHON` | Python for the helpers, default `.venv`'s |
 | `PSEUDONYMIZER_DATA_DIR` | absolute folder for `settings.json`, default the project folder |
 | `DETECTION_HELPER` | bundled helper program (PyInstaller) used instead of Python and the scripts; `--extract-document` for PDFs |
-| `PSEUDONYMIZER_APP` | `server` or `desktop`; the desktop app offers no Presidio yet |
+| `PSEUDONYMIZER_APP` | `server` or `desktop` (the desktop app sets data folder, helper and models) |
 | `PSEUDONYMIZER_API_TOKEN` | set by the desktop app: a new random secret (64 hex digits) per start; every `/api/` request needs it in `X-Pseudonymizer-Token`, which Electron adds to the window's requests (the page never sees it); removed from the environment before helpers and CLIs start |
 | `DOCLING_ARTIFACTS_PATH` | Docling models, default `~/.cache/docling/models` (read by `python/document_extraction.py`) |
 | `PSEUDONYMIZER_CACHE` | exported ONNX models, default `~/.cache/pseudonymizer` or `%LOCALAPPDATA%\pseudonymizer` |
@@ -113,8 +113,8 @@ with a login. API targets are parked in `parked/api-targets/`.
 sets the server's environment, imports `server/index.js`, waits for `listening`, then opens
 `http://127.0.0.1:47291` (or a free port). Lock-down: no Node in the window, sandbox, no navigation away, no new
 windows, no permissions, spell checker off (it downloaded dictionaries from Google), every request not to
-localhost or 127.0.0.1 cancelled. Build: `desktop/build-helper.mjs` (PyInstaller, `--onedir`, Presidio and spaCy
-excluded, Docling included, 0.94 GB; 3.3 GB from an environment with PyTorch's CUDA build via `HELPER_PYTHON`,
+localhost or 127.0.0.1 cancelled. Build: `desktop/build-helper.mjs` (PyInstaller, `--onedir`, with Docling, Presidio,
+spaCy and its de/fr/en models, never the Italian one; 3.3 GB from an environment with PyTorch's CUDA build via `HELPER_PYTHON`,
 `npm run dist:win:gpu`), `desktop/build-models.mjs` (copies GLiNER from the Hugging Face cache with links resolved,
 1.1 GB, and the Docling models, 1.2 GB). Windows: a ZIP per variant instead of an NSIS installer, which
 can't hold more than 2 GiB; the app adds its own Start menu entry for notifications (ADR 0008),

@@ -37,9 +37,9 @@ describe('desktop app options', () => {
     fs.rmSync(helperDir, { recursive: true, force: true });
   });
 
-  it('says it is the desktop app, which has no Presidio but opens PDFs', async () => {
+  it('says it is the desktop app, with all detectors and PDFs', async () => {
     const res = await server.request({ path: '/api/about' });
-    assert.deepEqual(res.json(), { app: 'desktop', detectors: ['gliner', 'ollama'], documents: ['pdf'] });
+    assert.deepEqual(res.json(), { app: 'desktop', detectors: ['gliner', 'presidio', 'ollama'], documents: ['pdf'] });
   });
 
   it('saves settings in the data folder, readable by the user only, not in the program folder', async () => {

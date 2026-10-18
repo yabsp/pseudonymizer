@@ -46,7 +46,7 @@ export const MAX_TEXT_BYTES = 5 * 1024 * 1024;
 export const MAX_JOBS = 50;
 export const MAX_WAITING_BYTES = 500 * 1024 * 1024;
 
-// "desktop" when started by the desktop app (desktop/main.js), which ships GLiNER but not Presidio.
+// "desktop" when started by the desktop app (desktop/main.js), which ships GLiNER, Presidio and Docling.
 const appKind = process.env.PSEUDONYMIZER_APP || 'server';
 if (!['server', 'desktop'].includes(appKind)) throw new Error(`PSEUDONYMIZER_APP must be "server" or "desktop", not "${appKind}".`);
 export const APP_KIND = appKind;
@@ -57,7 +57,7 @@ const apiToken = process.env.PSEUDONYMIZER_API_TOKEN || null;
 if (apiToken !== null && !/^[\da-f]{64}$/.test(apiToken)) throw new Error('PSEUDONYMIZER_API_TOKEN must be 64 hex digits.');
 export const API_TOKEN = apiToken;
 export const API_TOKEN_HEADER = 'x-pseudonymizer-token';
-export const AVAILABLE_DETECTORS = appKind === 'desktop' ? ['gliner', 'ollama'] : ['gliner', 'presidio', 'ollama'];
+export const AVAILABLE_DETECTORS = ['gliner', 'presidio', 'ollama'];
 // Both the project's Python and the desktop app's helper contain Docling.
 export const DOCUMENT_FORMATS = ['pdf'];
 

@@ -14,6 +14,8 @@ The desktop app now ships Docling for PDFs, and a GPU variant was asked for. Mea
 | Docling models: layout, tables, formulas, OCR (the ONNX layout copy is left out) | 1.2 GB |
 | Whole app, CPU | 3.5 GB unpacked, 2.21 GB compressed |
 | Whole app, GPU | about 5.9 GB unpacked |
+| Presidio with spaCy and the de/fr/en models (added later the same day) | about 1.75 GB more |
+| Windows ZIPs with Presidio | CPU 3.98 GB (5.3 GB unpacked), GPU 5.83 GB (7.6 GB unpacked) |
 
 electron-builder's Windows installer (NSIS) can't embed a package over 2 GiB: the CPU app is 64 MB over, and
 maximum compression doesn't help (the model weights don't compress). The GPU app is far over. Both work when
