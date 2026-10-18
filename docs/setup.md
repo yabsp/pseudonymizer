@@ -101,6 +101,14 @@ documents"); they ship with the app. Windows gets a ZIP instead of an installer:
 an NSIS installer can hold (docs/adr/0008-desktop-packaging.md). For the GPU variant, set `HELPER_PYTHON` to the
 `python.exe` of a separate environment with the CUDA build of PyTorch, the requirements and PyInstaller.
 
+### With GitHub Actions
+`.github/workflows/desktop.yml` runs the tests on Linux and Windows, then builds the Linux AppImage and the
+Windows ZIP; the Windows GPU ZIP only when asked. It starts on a version tag (`git push origin v0.1.0`; the
+tagged commit must contain the workflow) or by hand: Actions > "Desktop app" > Run workflow, tick "gpu" for the
+GPU variant. The files are under "Artifacts" on the run's page, kept for 30 days. The first run downloads the
+models (about 2.4 GB per system); later runs take them from the cache. GitHub release files can be at most 2 GiB
+and the builds are larger, so they are not attached to a release automatically.
+
 ## Run the tests
 ```
 npm test             # fast, with stand-ins for the models
