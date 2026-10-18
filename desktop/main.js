@@ -86,9 +86,11 @@ function blockInternet() {
   session.defaultSession.setSpellCheckerEnabled(false);
   session.defaultSession.setSpellCheckerDictionaryDownloadURL(NO_DICTIONARY_DOWNLOADS);
   session.defaultSession.webRequest.onBeforeRequest((details, callback) => callback({ cancel: !LOCAL_URL.test(details.url) }));
-  // Notifications only (the page shows no content in them, see public/js/ui/notifications.js), and only for this
-  // app's own page; no camera, microphone, location or other permissions.
-  const isAllowed = (permission, url) => permission === 'notifications' && LOCAL_URL.test(url || '');
+  // Only for this app's own page: notifications (the page shows no content in them, see
+  // public/js/ui/notifications.js) and writing to the clipboard (the Copy buttons, after a click). Not reading the
+  // clipboard (pasting with Ctrl+V needs no permission), no camera, microphone, location or anything else.
+  const ALLOWED_PERMISSIONS = ['notifications', 'clipboard-sanitized-write'];
+  const isAllowed = (permission, url) => ALLOWED_PERMISSIONS.includes(permission) && LOCAL_URL.test(url || '');
   session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback, details) => callback(isAllowed(permission, details.requestingUrl)));
   session.defaultSession.setPermissionCheckHandler((_webContents, permission, requestingOrigin) => isAllowed(permission, requestingOrigin + '/'));
 }
