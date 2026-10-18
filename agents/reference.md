@@ -14,11 +14,17 @@ need the app's `Origin` and the listed `Content-Type` (`rejectUnlessFromApp`). E
 | `GET /api/adapters` | | `[{ id, label, models: [{ id, label }] }]` |
 | `POST /api/detect/gliner` | `{ text, labels, threshold, model, accelerator? }` | `{ entities: [{ text, label, start, end, score, source }], runtime }` |
 | `POST /api/detect/presidio` | the same plus `language` (`auto`, `de`, `fr`, `it`, `en`) | the same plus `language` used |
-| `POST /api/extract/pdf` | the PDF (`application/pdf`, max 50 MB); `?formulas=1`, `?accelerator=` | `{ markdown, pages, images, formulas, formulasConverted, tables, device }` |
+| `POST /api/extract/pdf` | the PDF (`application/pdf`, max 50 MB); `?formulas=1`, `?accelerator=` | `{ markdown, pages, images, formulas, formulasConverted, tables, device, deviceNote? }` |
+| `POST /api/jobs?format=pdf\|text` | the file (`application/pdf`, or `application/octet-stream` for text); `&formulas=1`, `&accelerator=` | `201 { id, format, formulas, state, step, error }`; at most 50 documents and 500 MB waiting (429, 413) |
+| `GET /api/jobs` | | the list in that shape, never text; `state` `waiting`, `running`, `ready`, `failed`; `step` `{ number, of, label, seconds }` |
+| `GET /api/jobs/<id>`, `DELETE /api/jobs/<id>` | | GET adds `result: { text, document? }` once ready; DELETE cancels (process stopped, temp files deleted) and forgets |
+| `PUT /api/prompts/<file>` | `{ text }`; file one of `gliner-labels.txt`, `not-sensitive.txt`, `rules.md`, `detection.md`, `system.md` | `{ file }`; written as `prompts/<name>.<ext>` (user only), desktop: `prompts/` in the data folder |
 | `POST /api/hardware` | `{}` | `{ system, backends }` (see Hardware) |
 | `POST /api/cli/<adapter>` | `{ prompt, system, model }` | `{ text }` |
 
-`runtime` is `{ id, label, verified?, notice? }`: where detection ran; `notice` explains a fallback to the CPU.
+`device` is Docling's device (`cpu`, `cuda`, `xpu`, `mps`); `deviceNote` says when the chosen hardware is one Docling
+can't use (e.g. DirectML), so the processor read the document. Jobs live in memory only, one runs at a time
+(`server/jobs.js`, ADR 0005). `runtime` is `{ id, label, verified?, notice? }`: where detection ran; `notice` explains a fallback to the CPU.
 `accelerator` values: `auto`, `torch-cpu`, `torch-cuda`, `torch-xpu`, `torch-mps`, `onnx-cpu`, `onnx-cuda`,
 `onnx-directml`, `onnx-coreml` (allowlist `ACCELERATOR` in `server/gliner.js`). A PDF route is answered with 501
 in the desktop app.
@@ -65,11 +71,15 @@ Read and validated in `server/config.js` only (except `desktop/main.js`, which s
   masked forms, last four digits after "ending in"), security codes, expiry dates, tokens of known services,
   passwords after their name, usernames, IDs after a label, reference and court case numbers, passport and ID
   numbers, Swiss licence plates, dates and timestamps, street addresses (US, DE/CH, FR/IT), postal code and town,
-  names after labels, titles, "Fam." and words for relatives, phone numbers (not lab ranges, years, weeks).
+  names after labels, titles, "Fam." and words for relatives, phone numbers (not lab ranges, years, weeks), and
+  Swiss towns named alone (`public/js/core/swiss-places.js`, 4011 names from the swisstopo locality register, free
+  geodata with source named; names under 4 letters and common words left out; a town right after a court word stays
+  readable unless it also appears elsewhere).
 - `addDetected` (`public/js/core/mapping.js`) drops values made only of never-sensitive words
   (`prompts/not-sensitive*.txt`), diagnosis codes and Roman numerals, splits values across lines, links shorter
   forms of a person to the longer one (whatever the detector's order), adds name parts, double-name parts, part
-  combinations, short forms in brackets and capital or title-case variants with the same placeholder.
+  combinations, short forms in brackets, initials, the town of an address, spellings without umlauts and capital
+  or title-case variants with the same placeholder. Titles ("Herr", "Dr.") are context, not part of a name.
 - `pseudonymize`: longest value first, two passes through private-use markers (U+F0000 and up); values under 5
   characters only match as whole words (camelCase and a genitive "s" count as word edges).
 - `restore`: accepts `[[X_1]]`, `[X_1]` and `X_1`; reports unknown placeholders; a placeholder shared by a name
@@ -88,7 +98,7 @@ with a login. API targets are parked in `parked/api-targets/`.
 ## Data locations
 | What | Where |
 |---|---|
-| settings | `settings.json` in the project folder (mode 0600), desktop: `~/.config/pseudonymizer/` or `%APPDATA%\pseudonymizer\`; a copy in localStorage |
+| settings | `settings.json` in the project folder (mode 0600; on Windows its access list is set to the user with `icacls`), desktop: `~/.config/pseudonymizer/` or `%APPDATA%\pseudonymizer\`; a copy in localStorage |
 | theme | localStorage `pseudo-theme` |
 | GLiNER and tokenizer | `~/.cache/huggingface/hub` (desktop: bundled in `resources/models`, `HF_HUB_OFFLINE=1`) |
 | Docling models | `~/.cache/docling/models` |

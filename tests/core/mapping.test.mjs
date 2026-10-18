@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { knownGap } from '../helpers/known-gaps.mjs';
 import { addEntry, parseMapping } from '../helpers/core.mjs';
 
 const SOURCE = 'Patient Reto Ammann (reto.ammann@example.com) was seen by Dr. Corinne Bachmann.';
@@ -68,7 +67,7 @@ describe('adding detected values to the mapping', () => {
     assert.equal(mapping[0].original, 'Reto Ammann');
   });
 
-  it('KNOWN GAP: a value in another Unicode normalization form is still recognised', knownGap('text copied from PDFs or macOS is often NFD; "Müller" (NFC) is then not found'), () => {
+  it('a value in another Unicode normalization form is still recognised', () => {
     const nfdText = 'Termin mit Frau Müller'.normalize('NFD');
     const mapping = addEntry([], 'Müller', 'PERSON', nfdText);
     assert.equal(mapping.length, 1);
@@ -87,7 +86,7 @@ describe('importing an exported mapping file', () => {
     }
   });
 
-  it('KNOWN GAP: rejects placeholders the app would not write', knownGap('a placeholder without brackets is accepted; its value is then never restored and not reported'), () => {
+  it('rejects placeholders the app would not write', () => {
     assert.throws(() => parseMapping([{ original: 'Reto Ammann', placeholder: 'PERSON_1' }]));
   });
 });

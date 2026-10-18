@@ -5,21 +5,28 @@ import path from 'node:path';
 import { DOCUMENT_COMMAND, DOCUMENT_FORMATS, DOCUMENT_TIMEOUT_MS, MAX_PDF_BYTES } from './config.js';
 import { ACCELERATOR } from './gliner.js';
 import { BodyTooLargeError, readBytes, rejectUnlessFromApp, send } from './http.js';
+import { stopProcessTree } from './processes.js';
 
 // Every PDF file starts with "%PDF-".
 const PDF_SIGNATURE = '%PDF-';
+export const PDF_NOT_AVAILABLE = 'Opening PDFs is not part of the desktop app yet. Copy the text out of the PDF and paste it instead.';
 const RESULT_COUNTS = ['pages', 'images', 'formulas', 'tables'];
 
+export const isPdf = (bytes) => bytes.subarray(0, PDF_SIGNATURE.length).toString('latin1') === PDF_SIGNATURE;
+
 const isResult = (r) => r && typeof r.markdown === 'string' && typeof r.formulasConverted === 'boolean' && typeof r.device === 'string'
-  && RESULT_COUNTS.every((key) => Number.isInteger(r[key]) && r[key] >= 0);
+  && RESULT_COUNTS.every((key) => Number.isInteger(r[key]) && r[key] >= 0)
+  && (r.deviceNote === undefined || typeof r.deviceNote === 'string');
 // Only these fields go to the page; anything else the reader prints is dropped.
-const pickResult = ({ markdown, pages, images, formulas, formulasConverted, tables, device }) => ({ markdown, pages, images, formulas, formulasConverted, tables, device });
+const pickResult = ({ markdown, pages, images, formulas, formulasConverted, tables, device, deviceNote }) => ({
+  markdown, pages, images, formulas, formulasConverted, tables, device, ...(deviceNote === undefined ? {} : { deviceNote }),
+});
 
 /**
  * Extracts the PDF in a separate process. The file is written to a private temporary folder that is deleted
  * afterwards in every case; nothing of it is kept or logged.
  */
-function extractPdf(bytes, { formulas, accelerator }, signal) {
+export function extractPdf(bytes, { formulas, accelerator }, signal) {
   return new Promise((resolve, reject) => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pseudo-doc-'));
     const file = path.join(dir, 'document.pdf');
@@ -28,8 +35,8 @@ function extractPdf(bytes, { formulas, accelerator }, signal) {
     const child = spawn(DOCUMENT_COMMAND.command, args, { cwd: DOCUMENT_COMMAND.cwd });
     let out = '';
     let recentErrors = '';
-    const timer = setTimeout(() => child.kill(), DOCUMENT_TIMEOUT_MS);
-    signal.addEventListener('abort', () => child.kill(), { once: true });
+    const timer = setTimeout(() => stopProcessTree(child), DOCUMENT_TIMEOUT_MS);
+    signal.addEventListener('abort', () => stopProcessTree(child), { once: true });
     const cleanUp = () => {
       clearTimeout(timer);
       fs.rmSync(dir, { recursive: true, force: true });
@@ -59,7 +66,7 @@ function extractPdf(bytes, { formulas, accelerator }, signal) {
 export async function handleExtractPdf(req, res) {
   if (rejectUnlessFromApp(req, res, 'application/pdf')) return;
   if (!DOCUMENT_FORMATS.includes('pdf')) {
-    return send(res, 501, { error: 'Opening PDFs is not part of the desktop app yet. Copy the text out of the PDF and paste it instead.' });
+    return send(res, 501, { error: PDF_NOT_AVAILABLE });
   }
   let bytes;
   try {
@@ -68,7 +75,7 @@ export async function handleExtractPdf(req, res) {
     if (e instanceof BodyTooLargeError) return send(res, 413, { error: `The PDF is ${e.message}. Split it into smaller parts.` });
     return send(res, 400, { error: e.message });
   }
-  if (bytes.subarray(0, PDF_SIGNATURE.length).toString('latin1') !== PDF_SIGNATURE) {
+  if (!isPdf(bytes)) {
     return send(res, 415, { error: 'This file is not a PDF.' });
   }
   const query = new URL(req.url, 'http://x').searchParams;

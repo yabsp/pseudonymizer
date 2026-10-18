@@ -137,6 +137,33 @@ describe('parts of found names and short forms', () => {
     assert.equal(pseudonymize(mapping, text), 'eingeliefert ins [[COMPANY_1]]. Beilage: Arztzeugnis [[COMPANY_1]].');
   });
 
+  it('hides the initials of a person used alone, with the placeholder of the person (regression: "CB" in minutes)', () => {
+    const text = 'Anwesend: Corinne Bachmann, Jan van der Merwe, Anna Schmid-Meier, Rosa Maria Andrade.\nCB eröffnet. JvdM und A.S.-M. berichten; RMA und C. B. stimmen zu. Visum: R.A.';
+    const mapping = detect(text, [['Corinne Bachmann', 'PERSON'], ['Jan van der Merwe', 'PERSON'], ['Anna Schmid-Meier', 'PERSON'], ['Rosa Maria Andrade', 'PERSON']]);
+    assert.equal(pseudonymize(mapping, text), 'Anwesend: [[PERSON_1]], [[PERSON_2]], [[PERSON_3]], [[PERSON_4]].\n[[PERSON_1]] eröffnet. [[PERSON_2]] und [[PERSON_3]] berichten; [[PERSON_4]] und [[PERSON_1]] stimmen zu. Visum: [[PERSON_4]]');
+  });
+
+  it('gives initials that two people share a placeholder of their own, and leaves other capitals alone', () => {
+    const text = 'Maria Keller und Markus Kunz: MK hat entschieden. Art. 336 OR gilt; der CEO prüft. Otto Rüegg, Carlo Eberle Ott, Iris Vogt, DTF 143 IV 302.';
+    const mapping = detect(text, [['Maria Keller', 'PERSON'], ['Markus Kunz', 'PERSON'], ['Otto Rüegg', 'PERSON'], ['Carlo Eberle Ott', 'PERSON'], ['Iris Vogt', 'PERSON']]);
+    const result = pseudonymize(mapping, text);
+    assert.match(result, /: \[\[PERSON_6\]\] hat entschieden\./);
+    assert.ok(result.includes('Art. 336 OR gilt; der CEO prüft') && result.includes('DTF 143 IV 302'), result);
+  });
+
+  it('hides a name written without umlauts or accents, with the placeholder of the person (regression: "Luethi" after "Sandra Lüthi")', () => {
+    const text = 'Sandra Lüthi und Gérard Dubois. Gruss, S. Luethi; LUETHI; Gerard; Luthi.';
+    const mapping = detect(text, [['Sandra Lüthi', 'PERSON'], ['Gérard Dubois', 'PERSON']]);
+    assert.equal(pseudonymize(mapping, text), '[[PERSON_1]] und [[PERSON_2]]. Gruss, S. [[PERSON_1]]; [[PERSON_1]]; [[PERSON_2]]; [[PERSON_1]].');
+  });
+
+  it('hides the town of an address where it stands alone, under a placeholder of its own (regression: "Meilen" after "8706 Meilen")', () => {
+    const text = 'Wohnhaft Seestrasse 3, 8706 Meilen, und Via Nassa 21, CH-6900 Lugano. Termin in Meilen; Lugano, 3. Mai.';
+    const mapping = detect(text, [['Seestrasse 3, 8706 Meilen', 'ADDRESS'], ['Via Nassa 21, CH-6900 Lugano', 'ADDRESS']]);
+    assert.equal(pseudonymize(mapping, text), 'Wohnhaft [[ADDRESS_1]], und [[ADDRESS_2]]. Termin in [[ADDRESS_3]]; [[ADDRESS_4]], 3. Mai.');
+    assert.equal(restore(mapping, '[[ADDRESS_1]] / [[ADDRESS_3]]').text, 'Seestrasse 3, 8706 Meilen / Meilen');
+  });
+
   it('does not split names of companies, or lower-case user names', () => {
     const text = 'Muster Engineering AG, Engineering team; david.chen wrote, Chen too.';
     const mapping = detect(text, [['Muster Engineering AG', 'COMPANY'], ['david.chen', 'PERSON']]);

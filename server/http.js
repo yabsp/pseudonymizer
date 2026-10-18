@@ -33,14 +33,21 @@ export async function readBytes(req, maxBytes) {
 export const isAllowedHost = (req) => ALLOWED_HOSTS.includes(req.headers.host);
 
 /**
+ * For requests without a body that change something (DELETE). Browsers send Origin with them, and other sites
+ * can't send a DELETE at all without CORS. Sends the error and returns true if rejected.
+ */
+export function rejectUnlessFromAppOrigin(req, res) {
+  if (ALLOWED_ORIGINS.includes(req.headers.origin)) return false;
+  send(res, 403, { error: 'Origin not allowed.' });
+  return true;
+}
+
+/**
  * For requests that change something or start a process. Sends the error and returns true if rejected.
  * The type must be one a plain HTML form can't send (JSON, PDF), so other sites can't post here without CORS.
  */
 export function rejectUnlessFromApp(req, res, type = 'application/json') {
-  if (!ALLOWED_ORIGINS.includes(req.headers.origin)) {
-    send(res, 403, { error: 'Origin not allowed.' });
-    return true;
-  }
+  if (rejectUnlessFromAppOrigin(req, res)) return true;
   if (!(req.headers['content-type'] || '').startsWith(type)) {
     send(res, 415, { error: type === 'application/json' ? 'JSON expected.' : `${type} expected.` });
     return true;

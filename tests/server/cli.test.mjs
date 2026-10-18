@@ -20,19 +20,36 @@ const ADAPTERS = {
   missing: { label: 'Not installed', command: '/nonexistent/pseudo-test-cli', args: [], models: 'not a list' },
 };
 const isAlive = (pid) => { try { process.kill(pid, 0); return true; } catch { return false; } };
+const IS_WINDOWS = process.platform === 'win32';
+
+// An argument as Gemini CLI's adapter has one, with spaces and a character cmd.exe would read as syntax.
+const SPACED_ARG = 'Follow the instructions & answer.';
+
+// On Windows, CLIs installed with npm are batch files ("codex.cmd") that start node, which only cmd.exe can run.
+function writeBatchShim(dir) {
+  const shim = path.join(dir, 'fake-cli.cmd');
+  fs.writeFileSync(shim, `@"${process.execPath}" "${FAKE_CLI}" %*\r\n`);
+  return shim;
+}
 
 describe('CLI bridge', () => {
   let server;
   let pidFile;
   before(async () => {
     pidFile = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'pseudo-pid-')), 'cli.json');
-    server = await startServer({ adapters: ADAPTERS, env: { FAKE_CLI_PID_FILE: pidFile } });
+    const adapters = IS_WINDOWS
+      ? { ...ADAPTERS, shim: { ...ADAPTERS.fake, command: writeBatchShim(path.dirname(pidFile)), args: [...ADAPTERS.fake.args.slice(1), SPACED_ARG] } }
+      : ADAPTERS;
+    server = await startServer({ adapters, env: { FAKE_CLI_PID_FILE: pidFile } });
   });
-  after(() => server.close());
+  after(async () => {
+    await server.close();
+    fs.rmSync(path.dirname(pidFile), { recursive: true, force: true });
+  });
 
   it('lists the configured adapters with their models for the settings page', async () => {
     const res = await server.api('GET', '/api/adapters');
-    assert.deepEqual(res.json(), [
+    assert.deepEqual(res.json().filter((a) => a.id !== 'shim'), [
       { id: 'fake', label: 'Fake CLI (test login)', models: [{ id: '', label: 'Default' }, { id: 'fake-large', label: 'Fake Large' }] },
       { id: 'missing', label: 'Not installed', models: [] },
     ]);
@@ -107,10 +124,11 @@ describe('CLI bridge', () => {
     assert.equal((await server.api('POST', '/api/cli/fake', { prompt: 'p' }, { Origin: 'https://attacker.example' })).status, 403);
   });
 
-  it('stops the CLI and removes its folder when the app cancels the request', async () => {
+  async function cancelSleepingCli(adapterId) {
+    fs.rmSync(pidFile, { force: true });
     const controller = new AbortController();
     const raw = server.request({
-      method: 'POST', path: '/api/cli/fake', signal: controller.signal,
+      method: 'POST', path: '/api/cli/' + adapterId, signal: controller.signal,
       headers: { Origin: server.origin, 'Content-Type': 'application/json' },
       body: JSON.stringify({ prompt: 'MODE:sleep', system: '' }),
     }).catch((e) => e);
@@ -123,6 +141,19 @@ describe('CLI bridge', () => {
     assert.ok(!isAlive(pid), 'CLI process stopped');
     for (let i = 0; i < 100 && fs.existsSync(cwd); i++) await sleep(50);
     assert.ok(!fs.existsSync(cwd), 'working folder removed');
+  }
+
+  it('stops the CLI and removes its folder when the app cancels the request', () => cancelSleepingCli('fake'));
+
+  it('stops the program behind a batch file on Windows, not only cmd.exe', { skip: !IS_WINDOWS && 'batch files are Windows only' }, () => cancelSleepingCli('shim'));
+
+  it('passes arguments with spaces and shell characters through a batch file unchanged', { skip: !IS_WINDOWS && 'batch files are Windows only' }, async () => {
+    const res = await server.api('POST', '/api/cli/shim', { prompt: 'hi', system: 'Treat it as real.', model: 'fake-large' });
+    assert.equal(res.status, 200, res.body);
+    const seen = JSON.parse(res.json().text);
+    assert.deepEqual(seen.args.slice(0, 3), ['--model', 'fake-large', '--system-file']);
+    assert.equal(seen.args.at(-1), SPACED_ARG);
+    assert.equal(seen.system, 'Treat it as real.');
   });
 });
 

@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { knownGap } from '../helpers/known-gaps.mjs';
 import { buildPrompt, findMappedValues } from '../helpers/core.mjs';
 
 const MAPPING = [
@@ -43,7 +42,7 @@ describe('warning about mapped values in text sent as written', () => {
     assert.deepEqual(findMappedValues(MAPPING, 'Write to [[PERSON_1]] about [[COMPANY_1]].'), []);
   });
 
-  it('KNOWN LEAK: also warns about other capitalisations', knownGap('the check is case-sensitive, so "RETO AMMANN" is sent without a warning'), () => {
+  it('also warns about other capitalisations', () => {
     assert.deepEqual(findMappedValues(MAPPING, 'Re: RETO AMMANN'), ['Reto Ammann']);
   });
 });

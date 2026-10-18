@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { knownGap } from '../helpers/known-gaps.mjs';
 import { addEntry, pseudonymize, restore } from '../helpers/core.mjs';
 import { DOCUMENTS } from '../fixtures/documents.mjs';
 
@@ -104,26 +103,50 @@ describe('replacing values with placeholders', () => {
     }
   });
 
-  it('KNOWN GAP: entries that are only whitespace are ignored', knownGap('a table cell edited to spaces replaces every space in the text'), () => {
+  it('ignores entries that are only whitespace', () => {
     const mapping = [entry(' ', '[[PERSON_1]]')];
     assert.equal(pseudonymize(mapping, 'Reto Ammann'), 'Reto Ammann');
   });
 
-  it('KNOWN LEAK: other capitalisations of a value are hidden too', knownGap('replacement is case-sensitive; signature blocks and headers often use upper case'), () => {
+  it('hides a value of several words in any capitalisation', () => {
     const mapping = [entry('Reto Ammann', '[[PERSON_1]]')];
-    const pseudo = pseudonymize(mapping, 'Reto Ammann\nREF: RETO AMMANN / reto ammann');
-    assert.ok(!/reto ammann/i.test(pseudo), pseudo);
+    const pseudo = pseudonymize(mapping, 'Reto Ammann\nREF: RETO AMMANN / reto ammann / Reto AMMANN');
+    assert.equal(pseudo, '[[PERSON_1]]\nREF: [[PERSON_1]] / [[PERSON_1]] / [[PERSON_1]]');
   });
 
-  it('KNOWN LEAK: a value broken across a line or with extra spaces is hidden', knownGap('wrapped text from emails and PDFs splits names across lines'), () => {
+  it('keeps the case of a single word, so a name that is also a word leaves the word alone', () => {
+    const mapping = [entry('Weiss', '[[PERSON_1]]')];
+    assert.equal(pseudonymize(mapping, 'Frau Weiss weiss es.'), 'Frau [[PERSON_1]] weiss es.');
+  });
+
+  it('hides a value broken across a line or with extra spaces', () => {
     const mapping = [entry('Simone Ammann-Keller', '[[PERSON_1]]')];
     const pseudo = pseudonymize(mapping, 'begleitet von Simone\nAmmann-Keller und Simone  Ammann-Keller');
-    assert.ok(!pseudo.includes('Ammann-Keller'), pseudo);
+    assert.equal(pseudo, 'begleitet von [[PERSON_1]] und [[PERSON_1]]');
   });
 
-  it('KNOWN LEAK: a value is hidden regardless of Unicode normalization', knownGap('NFD text from PDFs or macOS does not match an NFC value'), () => {
-    const mapping = [entry('Müller', '[[PERSON_1]]')];
-    const pseudo = pseudonymize(mapping, 'Frau Müller'.normalize('NFD'));
-    assert.ok(!pseudo.normalize('NFC').includes('Müller'), pseudo);
+  it('hides a value written with a wrapped hyphen also where it is written whole, and the other way round', () => {
+    assert.equal(pseudonymize([entry('TA- 2601178', '[[ID_1]]')], 'Buchung TA- 2601178, Storno TA-2601178.'), 'Buchung [[ID_1]], Storno [[ID_1]].');
+    assert.equal(pseudonymize([entry('TA-2601178', '[[ID_1]]')], 'Buchung TA- 2601178.'), 'Buchung [[ID_1]].');
+  });
+
+  it('hides a double name wrapped after its hyphen', () => {
+    const mapping = [entry('Ammann-Keller', '[[PERSON_1]]')];
+    assert.equal(pseudonymize(mapping, 'Frau Ammann-\nKeller kam.'), 'Frau [[PERSON_1]] kam.');
+  });
+
+  it('hides a value regardless of Unicode normalization, in both directions', () => {
+    assert.equal(pseudonymize([entry('Müller', '[[PERSON_1]]')], 'Frau Müller'.normalize('NFD')), 'Frau [[PERSON_1]]');
+    assert.equal(pseudonymize([entry('Müller'.normalize('NFD'), '[[PERSON_1]]')], 'Frau Müller'), 'Frau [[PERSON_1]]');
+  });
+
+  it('hides a value with invisible characters inside it, as PDFs write soft hyphens', () => {
+    const mapping = [entry('Ammann', '[[PERSON_1]]')];
+    assert.equal(pseudonymize(mapping, 'Herr Am­mann und Herr Am​mann'), 'Herr [[PERSON_1]] und Herr [[PERSON_1]]');
+  });
+
+  it('still keeps short values to whole words in other capitalisations', () => {
+    const mapping = [entry('Li Wu', '[[PERSON_1]]')];
+    assert.equal(pseudonymize(mapping, 'LI WU, li wu, Lily Wuest'), '[[PERSON_1]], [[PERSON_1]], Lily Wuest');
   });
 });

@@ -9,7 +9,7 @@ import { addDetected, addEntry, categorizePresidioEntities, COMMON_WORDS, detect
 import { ROOT, startServer } from '../helpers/server.mjs';
 import { DOCUMENTS } from '../fixtures/documents.mjs';
 
-const PYTHON = path.join(ROOT, '.venv', 'bin', 'python');
+const PYTHON = path.join(ROOT, '.venv', process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python');
 const SKIP = !process.env.RUN_MODEL_TESTS ? 'set RUN_MODEL_TESTS=1 to run the real model'
   : !fs.existsSync(PYTHON) ? 'GLiNER is not installed in .venv (see docs/setup.md)' : false;
 const MODEL = 'urchade/gliner_multi_pii-v1';
@@ -26,8 +26,8 @@ const DETECTORS = {
     // reference codes, IBANs, dates and addresses; 14 documents
     // 2026-10-16: measured again with the 15 generated documents (29 in all); "Gerber" and "Lea" are now hidden
     // (single names of double names, names of relatives), windows with underscores are read twice
+    // 2026-10-18: measured again (tune/detection, with the Swiss town list); "Peter" and "Ruth" are now hidden
     knownMisses: {
-      'r3-markdown-case-table': ['Peter', 'Ruth'],
       'r5-it-ticket-mixed': ['Scheidung_Wenger_Rosa'],
     },
     knownChanges: {

@@ -3,6 +3,7 @@ import path from 'node:path';
 import readline from 'node:readline';
 import { spawn } from 'node:child_process';
 import { after, before, describe, it } from 'node:test';
+import { PYTHON } from '../helpers/python.mjs';
 import { FIXTURES, GLINER_HELPER as HELPER } from '../helpers/server.mjs';
 import { CSV_EXPORT, CSV_PEOPLE } from '../fixtures/documents.mjs';
 
@@ -11,7 +12,7 @@ const MODEL = 'urchade/gliner_multi_pii-v1';
 const CPU = { id: 'torch-cpu', label: 'CPU (PyTorch)' };
 
 function startHelper(entities, env = {}) {
-  const child = spawn('python3', [HELPER], {
+  const child = spawn(PYTHON, [HELPER], {
     env: { ...process.env, PYTHONPATH: path.join(FIXTURES, 'fake_gliner'), FAKE_GLINER_ENTITIES: JSON.stringify(entities), ...env },
   });
   const answers = [];

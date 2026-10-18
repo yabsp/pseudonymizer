@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { knownGap } from '../helpers/known-gaps.mjs';
 import { addEntry, pseudonymize, restore } from '../helpers/core.mjs';
 import { createRandom } from '../helpers/random.mjs';
 import { DOCUMENTS } from '../fixtures/documents.mjs';
@@ -65,7 +64,7 @@ describe('pseudonymize then restore', () => {
     }
   });
 
-  it('KNOWN GAP: text that already contains placeholder-like tokens survives a round trip', knownGap('re-pseudonymizing an old answer: a literal [[PERSON_1]] in the input is turned into the new PERSON_1 value'), () => {
+  it('text that already contains placeholder-like tokens survives a round trip', () => {
     const text = 'Old answer mentioned [[PERSON_1]]; today we discuss Reto Ammann.';
     const mapping = addEntry([], 'Reto Ammann', 'PERSON', text);
     assert.equal(restore(mapping, pseudonymize(mapping, text)).text, text);

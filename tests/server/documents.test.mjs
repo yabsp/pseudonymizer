@@ -3,12 +3,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { after, before, describe, it } from 'node:test';
-import { FIXTURES, request, startServer } from '../helpers/server.mjs';
+import { FAKE_DOCUMENT_READER, request, startServer } from '../helpers/server.mjs';
 
 const pdf = (text) => Buffer.from(`%PDF-1.7\n${text}\n%%EOF\n`, 'latin1');
-const IS_WINDOWS = process.platform === 'win32';
 
-describe('PDF extraction endpoint', { skip: IS_WINDOWS && 'the fake reader is started through its shebang' }, () => {
+describe('PDF extraction endpoint', () => {
   let server;
   let log;
   const upload = (body, { query = '', headers = {} } = {}) => server.request({
@@ -19,7 +18,7 @@ describe('PDF extraction endpoint', { skip: IS_WINDOWS && 'the fake reader is st
   before(async () => {
     log = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'pseudo-doclog-')), 'files.txt');
     fs.writeFileSync(log, '');
-    server = await startServer({ env: { GLINER_PYTHON: path.join(FIXTURES, 'fake-document-reader.mjs'), FAKE_DOC_LOG: log } });
+    server = await startServer({ env: { FAKE_DOC_LOG: log }, files: FAKE_DOCUMENT_READER });
   });
   after(async () => {
     await server.close();

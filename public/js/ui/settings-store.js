@@ -7,7 +7,7 @@ const SAVE_DELAY_MS = 400;
 
 export function readSettings() {
   const settings = Object.fromEntries(SETTING_FIELDS.map((field) => [field, $(field).value]));
-  return { ...settings, useRegex: $('useRegex').checked };
+  return { ...settings, useRegex: $('useRegex').checked, notify: $('notify').checked };
 }
 
 /** settings.json through the server; the browser copy only when the server can't be reached. */
@@ -27,6 +27,7 @@ export async function readSavedSettings() {
 export function applySavedSettings(saved) {
   for (const field of SETTING_FIELDS) if (saved[field] !== undefined) $(field).value = saved[field];
   $('useRegex').checked = saved.useRegex !== false;
+  $('notify').checked = saved.notify === true;
 }
 
 async function saveSettings() {

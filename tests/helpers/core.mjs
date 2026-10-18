@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { parseWordList } from '../../public/js/core/common-words.js';
 import { parseGlinerLabels } from '../../public/js/detection/gliner-labels.js';
 
-export { addDetected, addEntry, parseMapping, pseudonymize, restore, valuePattern } from '../../public/js/core/mapping.js';
+export { addDetected, addEntry, normalizeText, parseMapping, pseudonymize, restore, valuePattern } from '../../public/js/core/mapping.js';
 export { isOnlyCommonWords, parseWordList } from '../../public/js/core/common-words.js';
 export { chunkText } from '../../public/js/core/chunking.js';
 export { detectWithPatterns } from '../../public/js/core/patterns.js';

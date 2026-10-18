@@ -11,6 +11,7 @@ const DESKTOP_DIR = path.dirname(fileURLToPath(import.meta.url));
 // A fixed port, so the page keeps its origin and with it the theme choice between runs; another free port is
 // used if it is taken.
 const PREFERRED_PORT = 47291;
+const APP_ID = 'app.pseudonymizer.desktop';
 const SHELL_PATH_TIMEOUT_MS = 5000;
 // The search path a terminal would print: the login shell's PATH between two markers, so greetings or other
 // output from shell start-up files are ignored. [\s\S]*? matches everything between the markers, also line breaks.
@@ -82,8 +83,11 @@ function blockInternet() {
   session.defaultSession.setSpellCheckerEnabled(false);
   session.defaultSession.setSpellCheckerDictionaryDownloadURL(NO_DICTIONARY_DOWNLOADS);
   session.defaultSession.webRequest.onBeforeRequest((details, callback) => callback({ cancel: !LOCAL_URL.test(details.url) }));
-  // No camera, microphone, location, notifications or other permissions for the page.
-  session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
+  // Notifications only (the page shows no content in them, see public/js/ui/notifications.js), and only for this
+  // app's own page; no camera, microphone, location or other permissions.
+  const isAllowed = (permission, url) => permission === 'notifications' && LOCAL_URL.test(url || '');
+  session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback, details) => callback(isAllowed(permission, details.requestingUrl)));
+  session.defaultSession.setPermissionCheckHandler((_webContents, permission, requestingOrigin) => isAllowed(permission, requestingOrigin + '/'));
 }
 
 function lockWindows(origin) {
@@ -114,6 +118,8 @@ function openWindow(origin) {
 
 async function start() {
   blockInternet();
+  // Windows shows notifications only for an app with this id; the installer registers the same (build.appId).
+  if (process.platform === 'win32') app.setAppUserModelId(APP_ID);
   useTerminalSearchPath();
   const port = await choosePort();
   configureServer(port);

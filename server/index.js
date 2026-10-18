@@ -5,6 +5,8 @@ import { PORT } from './config.js';
 import { handleExtractPdf } from './documents.js';
 import { handleGliner, handleHardware, handlePresidio } from './gliner.js';
 import { isAllowedHost, send } from './http.js';
+import { addJob, getJob, listJobs, removeJob } from './jobs.js';
+import { savePrompt } from './prompts.js';
 import { getSettings, saveSettings } from './settings.js';
 import { serveStatic } from './static.js';
 
@@ -16,6 +18,13 @@ const ROUTES = [
   { method: 'POST', path: '/api/detect/gliner', handler: handleGliner },
   { method: 'POST', path: '/api/detect/presidio', handler: handlePresidio },
   { method: 'POST', path: '/api/extract/pdf', handler: handleExtractPdf },
+  { method: 'POST', path: '/api/jobs', handler: addJob },
+  { method: 'GET', path: '/api/jobs', handler: listJobs },
+  // /api/jobs/<job id>, the id a UUID made of hex digits and "-"; the id is passed to the handler
+  { method: 'GET', path: /^\/api\/jobs\/([\da-f-]+)$/, handler: getJob },
+  { method: 'DELETE', path: /^\/api\/jobs\/([\da-f-]+)$/, handler: removeJob },
+  // /api/prompts/<file>, a file name such as "rules.md"; savePrompt checks it against its list
+  { method: 'PUT', path: /^\/api\/prompts\/([\w.-]+)$/, handler: savePrompt },
   { method: 'POST', path: '/api/hardware', handler: handleHardware },
   // /api/cli/<adapter id>, the id made of letters, digits, "_" or "-"; the id is passed to the handler
   { method: 'POST', path: /^\/api\/cli\/([\w-]+)$/, handler: handleCli },

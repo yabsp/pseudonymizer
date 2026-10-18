@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { knownGap } from '../helpers/known-gaps.mjs';
 import { restore } from '../helpers/core.mjs';
 
 const MAPPING = [
@@ -48,17 +47,17 @@ describe('restoring original values in the answer', () => {
     assert.deepEqual(unresolved, ['[[PERSON_9]]', '[[ADDRESS_1]]']);
   });
 
-  it('KNOWN GAP: unknown placeholders are reported in every form', knownGap('only [[X_1]] is reported; [X_1] and bare X_1 pass silently'), () => {
+  it('unknown placeholders are reported in every form', () => {
     const { unresolved } = restore(MAPPING, 'Ask [PERSON_9] or PERSON_10.');
     assert.deepEqual(unresolved, ['[PERSON_9]', 'PERSON_10']);
   });
 
-  it('KNOWN GAP: placeholders are reported even when the mapping is empty', knownGap('after a page reload the mapping is empty and placeholders in a pasted answer pass silently'), () => {
+  it('placeholders are reported even when the mapping is empty', () => {
     const { unresolved } = restore([], 'Dear [[PERSON_1]]');
     assert.deepEqual(unresolved, ['[[PERSON_1]]']);
   });
 
-  it('KNOWN GAP: placeholders in another case are restored', knownGap('models sometimes write [[person_1]]; it is neither restored nor reported'), () => {
+  it('placeholders in another case are restored', () => {
     const { text } = restore(MAPPING, 'Dear [[person_2]]');
     assert.equal(text, 'Dear Corinne Bachmann');
   });

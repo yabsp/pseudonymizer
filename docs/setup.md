@@ -21,7 +21,8 @@ python3 -m venv .venv
 .venv/bin/pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
 .venv/bin/pip install -r python/requirements.txt
 ```
-On Windows, use `.venv\Scripts\pip` instead of `.venv/bin/pip`. The model (`urchade/gliner_multi_pii-v1`,
+On Windows, use `python -m venv .venv` and `.venv\Scripts\python -m pip` instead (`python3` there is often only
+the Microsoft Store's stand-in). The model (`urchade/gliner_multi_pii-v1`,
 Apache-2.0, 1.1 GB) is downloaded from Hugging Face the first time you run detection and kept in
 `~/.cache/huggingface`. The app uses `.venv` automatically; `GLINER_PYTHON=/path/to/python` selects another Python.
 
@@ -61,7 +62,8 @@ and what to install for it. Install one of these into `.venv`:
 | Intel GPU (Linux, Windows) | the XPU build of PyTorch from pytorch.org, and Intel's GPU drivers | detection and PDFs; not tested yet |
 | Apple silicon | nothing extra | later macOS version |
 
-A GPU is only used after it finds the same values as the CPU on a test text; otherwise the app uses the CPU and
+For PDFs, the CUDA build of PyTorch makes formula conversion about 5 times faster (tested with an RTX 2070); it
+is about 2.5 GB larger than the CPU build. A GPU is only used after it finds the same values as the CPU on a test text; otherwise the app uses the CPU and
 says why. The ONNX Runtime options convert the model once (about 10 s, 1.2 GB in `~/.cache/pseudonymizer`, or
 set `PSEUDONYMIZER_CACHE`).
 
@@ -87,15 +89,17 @@ Usage counts against your plan's limits.
 Needs the setup above (with the model downloaded once by running a detection):
 ```
 npm install                          # Electron and electron-builder, build tools only
-.venv/bin/pip install pyinstaller
+.venv/bin/python -m pip install pyinstaller
 npm run desktop                      # try it from the project folder
 npm run dist:linux                   # dist/Pseudonymizer-<version>-x86_64.AppImage
 npm run dist:win                     # on Windows: dist/Pseudonymizer-Setup-<version>.exe
 ```
-Build each system's version on that system. The Windows build is prepared but not tested yet.
+Build each system's version on that system. On Windows, the helper and the unpacked app (`electron-builder --win
+dir`) were built and tested; the installer step itself has not been run yet.
 
 ## Run the tests
 ```
 npm test             # fast, with stand-ins for the models
 npm run test:model   # the real models on realistic synthetic documents (a few minutes)
+npm run eval:corpus -- --corpus <folder>   # leaks and over-redaction on a corpus with ground truth
 ```

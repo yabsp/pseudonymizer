@@ -283,6 +283,91 @@ describe('pattern detection', () => {
     assert.ok(found(text, 'ID').includes('PF3EXAMPLE'));
   });
 
+  it('finds dates of birth after the words that announce them, in four languages', () => {
+    const text = [
+      'Patient: Herr Hans Muster, geb. 14.02.1961, AHV', 'Mme Claire Rochat, née le 1er mars 1980 à Sion', 'né le 21 juin 1975',
+      'Paziente: Giorgio Dalla Valle, nato il 5.3.1958', 'DOB: 03/22/1990', 'born May 4, 1971 in Bern', 'Feld geburtsdatum = 31.02.1947',
+      'geboren am 4. Mai 1971', 'Jahrgang 1961',
+    ].join('\n');
+    assert.deepEqual(found(text, 'DATE'), ['03/22/1990', '14.02.1961', '1er mars 1980', '21 juin 1975', '5.3.1958', 'May 4, 1971', '31.02.1947', '4. Mai 1971', '1961']);
+  });
+
+  it('leaves other dates alone, also after words that only end like a birth cue', () => {
+    assert.deepEqual(found('Termin am 14.02.2026; l\'aîné le 3 mai 2026; nata ieri; Born in the USA 1984', 'DATE'), []);
+  });
+
+  it('finds the values of identifying columns in CSV exports and Markdown tables', () => {
+    const csv = 'id;Vorname;Nachname;Geburtsdatum;Abteilung\n1;Hans;Muster;14.02.1961;Finanzen\n2;Maria;Keller;3.5.1980;IT\n';
+    assert.deepEqual(found(csv, 'PERSON'), ['Hans', 'Muster', 'Maria', 'Keller']);
+    assert.deepEqual(found(csv, 'DATE'), ['14.02.1961', '3.5.1980']);
+    const markdown = '| Nome | Data di nascita | Documento |\n|---|---|---|\n| Agnese Bernasconi | 19.12.1965 | C7Q20984 |\n';
+    assert.deepEqual(detectWithPatterns(markdown).filter((e) => e.text !== 'C7Q20984'), [{ text: 'Agnese Bernasconi', category: 'PERSON' }, { text: '19.12.1965', category: 'DATE' }]);
+    assert.ok(found(markdown, 'ID').includes('C7Q20984'));
+  });
+
+  it('finds the value next to a label in a form laid out as a table, and keeps the rest', () => {
+    const form = '| Geburtsdatum | 14.02.1961 |\n| Adresse | Im Bühl 12, 8564 Wäldi |\n| Diagnose | Vorhofflimmern |\n';
+    const values = detectWithPatterns(form).map((e) => e.text);
+    assert.ok(values.includes('14.02.1961') && values.includes('Im Bühl 12, 8564 Wäldi'), values.join(' | '));
+    assert.ok(!values.includes('Vorhofflimmern'));
+  });
+
+  it('finds subject IDs, randomisation numbers and initials in a study listing (regression: "101-001", "G.H.")', () => {
+    const listing = '| Subject ID | Initials | Sex | Age | Site | Randomisation no. | Status |\n|---|---|---|---|---|---|---|\n| 101-001 | G.H. | M | 35 | 101 | R3001 | completed |\n| 102-004 | A.S.-M. | F | 44 | 102 | R3002 | withdrawn |\n';
+    const values = detectWithPatterns(listing);
+    for (const [text, category] of [['101-001', 'ID'], ['R3001', 'ID'], ['G.H.', 'PERSON'], ['A.S.-M.', 'PERSON']]) assert.ok(values.some((e) => e.text === text && e.category === category), text);
+    for (const kept of ['M', 'F', '35', '101', 'completed', 'Initials']) assert.ok(!values.some((e) => e.text === kept), kept);
+  });
+
+  it('finds postal code and town after the name of an institution in a table cell, but not a year in a sentence (regression: "Vennes 1010 Lausanne")', () => {
+    const text = '| 103 | Unité clinique Vennes 1010 Lausanne   | Dr X |\nZentrum 79106 Freiburg im Breisgau\nseit 2014 Mandant.\nim Jahr 2014 Zürich besucht';
+    assert.deepEqual(found(text, 'ADDRESS'), ['1010 Lausanne', '79106 Freiburg im Breisgau']);
+  });
+
+  it('reads a table continued after a page break with the labels of the table before it (regression: "102-001" on page 9)', () => {
+    const pages = '| Subject ID | Initials | Status |\n|---|---|---|\n| 101-001 | G.H. | completed |\n\n--- Page 9 ---\n\n| 102-001 | G.M. | completed |\n|---|---|---|\n| 102-002 | K.L. | withdrawn |\n';
+    const values = detectWithPatterns(pages).map((e) => e.text);
+    for (const text of ['101-001', 'G.H.', '102-001', 'G.M.', '102-002', 'K.L.']) assert.ok(values.includes(text), text);
+    assert.ok(!values.includes('completed') && !values.includes('withdrawn'));
+  });
+
+  it('reads a CSV export whose cells contain the separator in quotes (regression: "Viktor" in an HR export)', () => {
+    const csv = 'id,first_name,last_name,notes\nHPS-1,Hans,Muster,"permit G, cross-border"\nHPS-2,Viktor,Keller,none\n';
+    assert.deepEqual(found(csv, 'PERSON'), ['Hans', 'Muster', 'Viktor', 'Keller']);
+  });
+
+  it('does not hide row numbers, column headers or cells of other columns', () => {
+    const csv = 'Nr;Name;Status;Konto\n1;Hans Muster;aktiv;offen\n2;Maria Keller;inaktiv;CH93 0076 2011 6238 5295 7\n';
+    const values = detectWithPatterns(csv).map((e) => e.text);
+    for (const kept of ['1', '2', 'aktiv', 'inaktiv', 'offen', 'Name', 'Konto']) assert.ok(!values.includes(kept), kept);
+    assert.ok(values.includes('Hans Muster') && values.includes('CH93 0076 2011 6238 5295 7'));
+  });
+
+  it('finds IDs, e-mail addresses and host names that PDF extraction wrapped after a hyphen (regression: "harrowgate- analytics.example")', () => {
+    const text = 'Buchung TA- 2601178 am 3.1.\n| oliver.pemberton@harrowgate- analytics.example | eval-lindwurm- 01.harrowgate- analytics.example |';
+    assert.deepEqual(detectWithPatterns(text).map((e) => [e.text, e.category]), [
+      ['oliver.pemberton@harrowgate- analytics.example', 'EMAIL'], ['eval-lindwurm- 01.harrowgate- analytics.example', 'HOST'], ['TA- 2601178', 'ID']]);
+  });
+
+  it('finds computer names without a domain, and leaves codes and versions alone (regression: "sur-nb002", "ETUDE-PC-07")', () => {
+    const text = 'Clients sur-nb002, sgrh-scan03 und db-billing-01; Poste ETUDE-PC-07, LT-LMO-05. ICD-10, COVID-19, sha-256, covid-19, utf-8, gpt-4o, e-mail.';
+    assert.deepEqual(found(text, 'HOST'), ['sur-nb002', 'sgrh-scan03', 'db-billing-01', 'ETUDE-PC-07', 'LT-LMO-05']);
+  });
+
+  it('finds Swiss towns named without a postal code (regression: "attinente di Poschiavo", "Schadenzentrum Hochdorf")', () => {
+    const text = 'Attinente di Poschiavo, residente a Mendrisio. Schadenzentrum Hochdorf; La Chaux-de-Fonds und St. Gallen.';
+    assert.deepEqual(found(text, 'LOCATION'), ['Poschiavo', 'Mendrisio', 'Hochdorf', 'La Chaux-de-Fonds', 'St. Gallen']);
+  });
+
+  it('leaves town names that are also common words alone ("Berg", "Lohn", "Chemin", "Root")', () => {
+    assert.deepEqual(found('Der Lohn am Berg; chemin du Port; root cause, Root Cause Analysis.', 'LOCATION'), []);
+  });
+
+  it('keeps the seat of a court readable ("Bezirksgericht Hochdorf", "Pretura di Mendrisio")', () => {
+    const text = 'Bezirksgericht Hochdorf, Pretura di Mendrisio, Tribunal d\'arrondissement de Lausanne; wohnhaft in Hochdorf.';
+    assert.deepEqual(found(text, 'LOCATION'), ['Hochdorf']);
+  });
+
   it('lists each value once, with the category of the first pattern that finds it', () => {
     const values = detectWithPatterns('AHV-Nr.: 756.1234.5678.97').map((e) => [e.text, e.category]);
     assert.deepEqual(values, [['756.1234.5678.97', 'ID']]);

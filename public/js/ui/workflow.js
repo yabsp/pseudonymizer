@@ -1,7 +1,6 @@
-import { parseWordList } from '../core/common-words.js';
-import { addDetected, addEntry, parseMapping, pseudonymize, restore } from '../core/mapping.js';
-import { detectWithPatterns } from '../core/patterns.js';
+import { addEntry, parseMapping, pseudonymize, restore } from '../core/mapping.js';
 import { buildPrompt, findMappedValues } from '../core/prompt.js';
+import { findSensitiveValues } from '../detection/find-values.js';
 import { DETECTORS } from '../detection/index.js';
 import { callCli } from '../targets/cli.js';
 import { isAbort, whileBusy } from './busy.js';
@@ -9,6 +8,7 @@ import { markDetectorReady } from './detector-settings.js';
 import { acceptedExtensions, importDocument } from '../import/index.js';
 import { $, setStatus } from './dom.js';
 import { downloadFile, downloadJson } from './files.js';
+import { notify } from './notifications.js';
 import { getPrompts } from './prompts-panel.js';
 import { renderMappingTable, renderPreview, renderSnippet, renderSummary } from './render.js';
 import { readSettings } from './settings-store.js';
@@ -17,7 +17,7 @@ import { showTab } from './tabs.js';
 // textAtLastDetection === null: not detected yet, so steps 2 and 3 stay hidden and Send is locked.
 // source === null: the text was typed or pasted; otherwise { name, format } of the opened file.
 // document === null: the text box is the text; otherwise a PDF sent as an attachment, { file, markdown, pages,
-// images, formulas, formulasConverted, tables }; file stays in this page only, for converting formulas later.
+// images, formulas, formulasConverted, tables, device, deviceNote? }; file stays in this page only, for converting formulas later.
 // selected === null: no placeholder chosen in the preview; otherwise the placeholder shown in valueInfo.
 const state = {
   mapping: [],
@@ -55,28 +55,33 @@ async function detect(patternsOnly = false) {
   $('noModelNotice').hidden = true;
 
   try {
-    const prompts = getPrompts();
-    const { entities, failed, parts, note = '' } = useModel
-      ? await whileBusy('Detecting sensitive values', (signal, progress) => detector.run(text, { settings, prompts, signal, progress }))
-      : { entities: [], failed: 0, parts: 0 };
-    if (useModel) markDetectorReady(settings.detector);
-    // Patterns first: for a value both find, the pattern's category is the reliable one (an IPv6 address is IP, not URL).
-    let mapping = state.mapping;
-    if (settings.useRegex) for (const e of detectWithPatterns(text)) mapping = addEntry(mapping, e.text, e.category, text);
-    state.mapping = addDetected(mapping, entities, text, parseWordList(prompts.notSensitive).words);
-    state.textAtLastDetection = text;
-    showValue(null);
-    refresh();
-    $('reviewCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
-    if (failed) {
-      setStatus('detectStatus', `The local model returned unusable output for ${failed} of ${parts} part(s), so values are probably missing. Check step 2 carefully or try another model.`, true);
-    } else {
-      setStatus('detectStatus', `${state.mapping.length} values to hide${useModel ? '' : ' (patterns only)'}. Check them in step 2. ${note}`.trim());
+    const options = { detector: useModel ? detector : null, settings, prompts: getPrompts() };
+    const found = useModel
+      ? await whileBusy('Detecting sensitive values', (signal, progress) => findSensitiveValues(text, state.mapping, { ...options, signal, progress }))
+      : await findSensitiveValues(text, state.mapping, options);
+    if (useModel) {
+      markDetectorReady(settings.detector);
+      notify('Sensitive values found. Check them before sending.');
     }
+    showFound(found);
   } catch (e) {
     setStatus('detectStatus', isAbort(e)
       ? 'Detection cancelled. Nothing was changed.'
       : 'Detection failed: ' + e.message + detector.failureHint, !isAbort(e));
+  }
+}
+
+/** Shows the result of findSensitiveValues in step 2, for the text now in step 1. */
+function showFound({ mapping, failed, parts, note, usedModel }) {
+  state.mapping = mapping;
+  state.textAtLastDetection = sourceText();
+  showValue(null);
+  refresh();
+  $('reviewCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  if (failed) {
+    setStatus('detectStatus', `The local model returned unusable output for ${failed} of ${parts} part(s), so values are probably missing. Check step 2 carefully or try another model.`, true);
+  } else {
+    setStatus('detectStatus', `${mapping.length} values to hide${usedModel ? '' : ' (patterns only)'}. Check them in step 2. ${note}`.trim());
   }
 }
 
@@ -172,12 +177,13 @@ function showDocument() {
   if (!doc) return;
   const facts = [plural(doc.pages, 'page', 'pages'), doc.tables && plural(doc.tables, 'table', 'tables'),
     doc.images && `${plural(doc.images, 'image', 'images')}, not sent`,
-    doc.formulas && (doc.formulasConverted ? `${plural(doc.formulas, 'formula', 'formulas')} as LaTeX` : `${plural(doc.formulas, 'formula', 'formulas')}, not converted`)];
+    doc.formulas && (doc.formulasConverted ? `${plural(doc.formulas, 'formula', 'formulas')} as LaTeX` : `${plural(doc.formulas, 'formula', 'formulas')}, not converted`),
+    doc.device === 'cuda' && 'read with the graphics card', doc.deviceNote];
   $('documentName').textContent = state.source.name;
   $('documentFacts').textContent = facts.filter(Boolean).join(' · ');
   const hasUnconverted = doc.formulas > 0 && !doc.formulasConverted;
   $('formulaNotice').hidden = !hasUnconverted;
-  if (hasUnconverted) $('formulaText').textContent = `${plural(doc.formulas, 'formula is', 'formulas are')} marked but not sent. Converting them to LaTeX takes about a minute each.`;
+  if (hasUnconverted) $('formulaText').textContent = `${plural(doc.formulas, 'formula is', 'formulas are')} marked but not sent. Converting them to LaTeX takes about 10 seconds each, less with a graphics card.`;
   $('documentText').textContent = doc.markdown;
 }
 
@@ -216,20 +222,23 @@ export function refresh() {
   updateSteps();
 }
 
+function putIntoStepOne({ text, document, source }, file) {
+  state.source = source;
+  if (document) {
+    state.document = { file, markdown: text, ...document };
+  } else {
+    state.document = null;
+    $('input').value = text;
+  }
+  showDocument();
+  showSource();
+}
+
 async function openDocument(file, { formulas = false } = {}) {
   const title = formulas ? 'Converting formulas' : 'Opening ' + file.name;
   try {
     const { accelerator } = readSettings();
-    const { text, document, source } = await whileBusy(title, (signal, progress) => importDocument(file, { signal, progress, formulas, accelerator }));
-    state.source = source;
-    if (document) {
-      state.document = { file, markdown: text, ...document };
-    } else {
-      state.document = null;
-      $('input').value = text;
-    }
-    showDocument();
-    showSource();
+    putIntoStepOne(await whileBusy(title, (signal, progress) => importDocument(file, { signal, progress, formulas, accelerator })), file);
     const done = formulas ? 'Formulas converted.' : 'Document opened.';
     setStatus('detectStatus', state.textAtLastDetection === null || !state.mapping.length
       ? `${done} Find the sensitive values next.`
@@ -239,6 +248,22 @@ async function openDocument(file, { formulas = false } = {}) {
     const cancelled = formulas ? 'Converting cancelled. Nothing was changed.' : 'Opening cancelled. Nothing was changed.';
     setStatus('detectStatus', isAbort(e) ? cancelled : e.message, !isAbort(e));
   }
+}
+
+/**
+ * Opens a document from the Documents tab in step 1: imported as importDocument returns it, file the original
+ * (kept in this page for converting formulas later). found (from findSensitiveValues, with a fresh mapping)
+ * replaces the values of the previous text and goes straight to step 2; without it, detection comes next.
+ */
+export function openConverted(imported, file, found = null) {
+  showTab('work');
+  putIntoStepOne(imported, file);
+  if (found) return showFound(found);
+  state.mapping = [];
+  state.textAtLastDetection = null;
+  setStatus('detectStatus', 'Document opened. Find the sensitive values next.');
+  refresh();
+  $('textCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function initDropZone() {

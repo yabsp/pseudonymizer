@@ -1,6 +1,6 @@
 import { $ } from './dom.js';
 
-const TABS = ['work', 'settings', 'prompts'];
+const TABS = ['work', 'documents', 'settings', 'prompts'];
 const ARROW_STEPS = { ArrowRight: 1, ArrowLeft: -1 };
 
 export function showTab(name) {

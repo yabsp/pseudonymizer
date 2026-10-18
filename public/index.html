@@ -29,6 +29,7 @@
     </div>
     <nav class="tabs" role="tablist" aria-label="Sections">
       <button type="button" role="tab" id="tab-work" aria-controls="panel-work">Pseudonymize</button>
+      <button type="button" role="tab" id="tab-documents" aria-controls="panel-documents">Documents</button>
       <button type="button" role="tab" id="tab-settings" aria-controls="panel-settings">Settings<span id="settingsAlert" class="dot" title="Detection model not ready" hidden></span></button>
       <button type="button" role="tab" id="tab-prompts" aria-controls="panel-prompts">Prompts<span id="promptsAlert" class="dot" title="Prompt files missing" hidden></span></button>
     </nav>
@@ -169,6 +170,24 @@
     </section>
   </div>
 
+  <div id="panel-documents" role="tabpanel" aria-labelledby="tab-documents" hidden>
+    <section class="card">
+      <div class="step-head">
+        <h2>Documents</h2>
+        <button type="button" class="ghost small" id="addDocumentsBtn">Add files</button>
+        <input type="file" id="documentFiles" multiple hidden>
+      </div>
+      <p class="hint">Add several files at once (text or PDF). They are converted one after another on this machine, and the sensitive values are found, while you work on something else. Open a ready document to check it in step 2 and send it yourself; nothing is sent automatically. The list is kept only while the app runs.</p>
+      <div class="drop-zone" id="documentsDropZone">
+        <ol id="jobList" class="job-list" aria-label="Documents" data-empty="No documents yet. Drop files here or use Add files."></ol>
+        <div class="drop-hint" aria-hidden="true">Drop the files to add them</div>
+      </div>
+      <label class="check"><input type="checkbox" id="jobDetect" checked> Find the sensitive values right after converting</label>
+      <label class="check"><input type="checkbox" id="jobFormulas"> Convert formulas in PDFs to LaTeX (about a minute per formula)</label>
+      <p id="documentsStatus" class="status" role="status"></p>
+    </section>
+  </div>
+
   <div id="panel-settings" role="tabpanel" aria-labelledby="tab-settings" hidden>
     <section class="card">
       <h2>Detection</h2>
@@ -240,13 +259,19 @@
       <label class="field" id="modelSelectLabel">Model <select id="modelSelect"></select></label>
       <label class="field" id="modelInputLabel">Model name <input id="model" placeholder="Leave empty for the tool's default"></label>
     </section>
+    <section class="card">
+      <h2>Notifications</h2>
+      <p class="hint">A short system message when a document is ready or detection is done while you work in another window. It never contains file names, text or values.</p>
+      <label class="check"><input type="checkbox" id="notify"> Notify me when work is done</label>
+      <p id="notifyStatus" class="status" role="status"></p>
+    </section>
     <p id="settingsStatus" class="status saved" role="status"></p>
   </div>
 
   <div id="panel-prompts" role="tabpanel" aria-labelledby="tab-prompts" hidden>
     <section class="card">
       <h2>Prompts</h2>
-      <p class="hint">Loaded from the <code>prompts</code> folder. A file like <code>rules.md</code> always wins over <code>rules.default.md</code>. Changes here last until you reload the page; edit the files to keep them.</p>
+      <p class="hint">Loaded from the <code>prompts</code> folder. A file like <code>rules.md</code> always wins over <code>rules.default.md</code>. Changes here are used right away; "Save" keeps them as your own files (<code>rules.md</code> and so on), the shipped defaults stay as they are.</p>
       <label class="field">What GLiNER looks for, one <code>label = CATEGORY</code> per line <span id="src-gliner-labels" class="src"></span>
         <textarea id="glinerLabels" rows="10"></textarea>
       </label>
@@ -265,7 +290,7 @@
           <textarea id="systemPrompt" rows="4"></textarea>
         </label>
       </details>
-      <div class="actions"><button type="button" class="ghost" id="reloadPrompts">Reload from files</button><span id="promptStatus" class="status" role="status"></span></div>
+      <div class="actions"><button type="button" id="savePrompts">Save</button><button type="button" class="ghost" id="reloadPrompts">Reload from files</button><span id="promptStatus" class="status" role="status"></span></div>
     </section>
   </div>
 </main>

@@ -3,14 +3,14 @@
 | Purpose | Default (shipped) | Your override (preferred if present) |
 |---|---|---|
 | What GLiNER looks for (labels) | `gliner-labels.default.txt` | `gliner-labels.txt` |
-| Words never sensitive on their own (pronouns, titles, greetings, professions, parties, family members, courts without a place, form labels, closing words) | `not-sensitive.default.txt` | `not-sensitive.txt` |
+| Words never sensitive on their own (pronouns, titles, greetings, professions, parties, family members, courts without a place, form labels, closing words, abbreviations such as "OR" or "CEO" that look like initials) | `not-sensitive.default.txt` | `not-sensitive.txt` |
 | What to pseudonymize, for the Ollama detector | `rules.default.md` | `rules.md` |
 | Instructions for the Ollama detector | `detection.default.md` | `detection.md` |
 | Instructions for the target model | `system.default.md` | `system.md` |
 
 For each purpose the app loads the override if it exists, otherwise the default.
 If neither exists, the app stops with an error naming the missing files.
-To change one, copy the default to the override name and edit the copy; the defaults stay as shipped.
+To change one, edit it in the Prompts tab and press "Save", or copy the default to the override name and edit the copy; the defaults stay as shipped. The desktop app keeps saved overrides in its data folder (`prompts/` next to `settings.json`), as its own files are read-only.
 
 The GLiNER labels file has one `label = CATEGORY` per line (`#` starts a comment); the default file explains the format. Problems are shown with their line number in the Prompts tab, and GLiNER detection won't run until they are fixed.
 

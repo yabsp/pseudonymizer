@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, it } from 'node:test';
-import { knownGap } from '../helpers/known-gaps.mjs';
+import { assertOnlyUserCanAccess } from '../helpers/file-access.mjs';
 import { SETTINGS_FILE, startServer } from '../helpers/server.mjs';
 
 const SETTINGS = {
@@ -29,7 +29,7 @@ describe('settings API', () => {
     const saved = await server.api('PUT', '/api/settings', SETTINGS);
     assert.equal(saved.status, 200);
     assert.deepEqual(JSON.parse(fs.readFileSync(file, 'utf8')), SETTINGS);
-    assert.equal(fs.statSync(file).mode & 0o777, 0o600);
+    assertOnlyUserCanAccess(file);
     assert.deepEqual((await server.api('GET', '/api/settings')).json(), SETTINGS);
   });
 
@@ -67,10 +67,12 @@ describe('settings API', () => {
     assert.ok(server.isRunning());
   });
 
-  it('KNOWN BUG: makes an existing, readable settings file private when saving', knownGap('writeFileSync only applies mode 0600 when it creates the file; an existing 0644 file keeps the API key world-readable'), async () => {
+  it('makes an existing, readable settings file private when saving (regression: 0644 stayed 0644)', async () => {
     fs.writeFileSync(file, '{}', { mode: 0o644 });
     fs.chmodSync(file, 0o644);
-    await server.api('PUT', '/api/settings', SETTINGS);
-    assert.equal(fs.statSync(file).mode & 0o777, 0o600);
+    assert.equal((await server.api('PUT', '/api/settings', SETTINGS)).status, 200);
+    assertOnlyUserCanAccess(file);
+    assert.deepEqual(JSON.parse(fs.readFileSync(file, 'utf8')), SETTINGS);
+    assert.deepEqual(fs.readdirSync(server.dir).filter((name) => name.endsWith('.tmp')), [], 'no temporary file left');
   });
 });

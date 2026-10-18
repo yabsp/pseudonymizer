@@ -35,20 +35,30 @@ You also need one AI tool, installed and logged in on your computer: Claude Code
 4. **Answer.** The answer comes back with the original values put back in. An answer from another chat can be
    pasted there too ("Already have an answer").
 
+**Several documents at once:** in the Documents tab, add or drop several files. They are converted one after another
+on your computer and their sensitive values are found right away, so you can work on something else meanwhile.
+Open puts a ready document into the steps above; sending stays a separate step. The list is gone when the app
+closes.
+
 Settings has the detection model (GLiNER is the default; GLiNER + Presidio finds more), the sensitivity, the
 hardware (a GPU is used automatically if your computer has a usable one) and the AI tool. Settings are saved
-automatically. The button at the top right switches between light, dark and your system's setting.
+automatically. Notifications (off by default) tell you when a document is ready or detection is done while the
+window is in the background; they never contain file names, text or values. The button at the top right switches between light, dark and your system's setting.
 
 ### PDF documents
 Text, headings and tables are read on your computer, also from scanned pages. Images are never sent: each is
 replaced by a marker such as `[Image 1, page 2: not sent]`. The PDF file itself and its file name are never sent
-either. Formulas are marked at first; "Convert formulas" turns them into LaTeX (about a minute each on a laptop).
+either. Formulas are marked at first; "Convert formulas" turns them into LaTeX (about 10 seconds each on a desktop
+processor, under a second with an NVIDIA graphics card).
 
 ## Good to know
 - Detecting values takes a few seconds per page on a laptop; the first detection after starting also loads the
   model (about 10 seconds).
-- The desktop app doesn't open PDFs and doesn't offer Presidio yet.
-- Planned: converting several documents in the background, notifications, reusable value lists.
+- Swiss towns are hidden also without a postal code ("aus Hochdorf"); a court's seat ("Bezirksgericht Hochdorf")
+  stays readable unless the town also appears elsewhere in the text.
+- The desktop app doesn't open PDFs and doesn't offer Presidio yet. Prompt changes are kept with "Save" in the
+  Prompts tab.
+- Planned: reusable value lists.
 
 ## For developers and AI agents
 [AGENTS.md](AGENTS.md) has the engineering rules (confidentiality first) and [agents/](agents/) the technical

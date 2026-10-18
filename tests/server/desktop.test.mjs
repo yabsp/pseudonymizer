@@ -4,6 +4,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { after, before, describe, it } from 'node:test';
+import { assertOnlyUserCanAccess } from '../helpers/file-access.mjs';
+import { PYTHON } from '../helpers/python.mjs';
 import { FIXTURES, GLINER_HELPER, SETTINGS_FILE, startServer } from '../helpers/server.mjs';
 
 const MODEL = 'urchade/gliner_multi_pii-v1';
@@ -18,7 +20,7 @@ describe('desktop app options', () => {
     helperDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pseudo-helper-'));
     // Stands in for the PyInstaller program: one executable, started without arguments.
     const helper = path.join(helperDir, 'detection-helper');
-    fs.writeFileSync(helper, `#!/bin/sh\nexec python3 "${GLINER_HELPER}"\n`, { mode: 0o755 });
+    fs.writeFileSync(helper, `#!/bin/sh\nexec "${PYTHON}" "${GLINER_HELPER}"\n`, { mode: 0o755 });
     server = await startServer({
       env: {
         PSEUDONYMIZER_APP: 'desktop',
@@ -45,7 +47,7 @@ describe('desktop app options', () => {
     assert.equal(res.status, 200, res.body);
     const file = path.join(dataDir, 'settings.json');
     assert.deepEqual(JSON.parse(fs.readFileSync(file, 'utf8')), { detector: 'gliner' });
-    if (!IS_WINDOWS) assert.equal(fs.statSync(file).mode & 0o777, 0o600);
+    assertOnlyUserCanAccess(file);
     assert.ok(!fs.existsSync(path.join(server.dir, SETTINGS_FILE)));
   });
 

@@ -8,7 +8,9 @@ AI tool the user has installed and logged in to.
  Browser (public/)                         Local server (server/, 127.0.0.1 only)
  ┌───────────────────────────────┐  HTTP   ┌──────────────────────────────────┐
  │ ui/       tabs, settings,     │ ──────▶ │ index.js   route table           │
- │           workflow (4 steps)  │         │ static.js  public/ and prompts/  │
+ │           workflow (4 steps), │         │ static.js  public/ and prompts/  │
+ │           documents list      │         │ jobs.js    documents list        │
+ │                               │         │ documents.js Docling, 1 per PDF  │
  │ core/     mapping, replace,   │         │ settings.js settings.json        │
  │           restore, patterns   │         │ gliner.js ─┐                     │
  │ detection/ GLiNER, Presidio,  │
@@ -33,7 +35,7 @@ AI tool the user has installed and logged in to.
    AHV numbers, BIC/SWIFT codes, IBANs, postal accounts, company numbers, Italian tax codes, card numbers (also
    masked) and their last digits, security codes and expiry dates, access keys and tokens, passwords after their
    name, usernames, IDs after a label, reference and court case numbers, passport numbers, Swiss license plates,
-   dates and timestamps, street addresses, postal code and town, names after a label, an academic title, "Fam."
+   dates and timestamps, street addresses, postal code and town, Swiss towns named alone (a list of 4011 place names from the swisstopo locality register in `core/swiss-places.js`, without names that are also common words, and not after a court such as "Bezirksgericht"), names after a label, an academic title, "Fam."
    or a word for a relative, phone numbers) are added first, so their category wins. Values that don't literally
    appear in the text (in any case), consist only of words that are never sensitive (`prompts/not-sensitive*.txt`),
    or are diagnosis codes or Roman numerals are dropped; a value across lines becomes one value per line. Parts of
@@ -61,7 +63,20 @@ AI tool the user has installed and logged in to.
 - **PDF extraction** (`server/documents.js`, `python/document_extraction.py`): the page uploads the PDF to
   `POST /api/extract/pdf`; the server writes it to a private temporary folder, starts one Docling process per
   file (killed on cancel or after 30 minutes) and deletes the folder afterwards. Docling returns Markdown with
-  tables, numbered image, formula and page markers, and formulas as LaTeX when asked (`?formulas=1`).
+  tables, numbered image, formula and page markers, and formulas as LaTeX when asked (`?formulas=1`). It runs
+  on the device of the Hardware setting (`--accelerator`, see "Hardware"); the answer says which (`device`, plus
+  `deviceNote` when the chosen hardware is one Docling can't use), and the formula model's precision follows the
+  device (ADR 0006).
+- **Documents list** (`server/jobs.js`, `public/js/ui/documents.js`, `public/js/import/jobs.js`): the Documents
+  tab uploads several files to `POST /api/jobs`; the server runs each through the pipeline of its format (a
+  registry of steps: text is read as UTF-8, a PDF goes through `extractPdf` in `documents.js`), one job at a time
+  in the order added, and the page follows the states with `GET /api/jobs` every second. When a document is
+  converted, the page fetches its text (`GET /api/jobs/<id>`), finds the values with the detector chosen in
+  Settings (`detection/find-values.js`, shared with step 1) and marks it "ready to review"; Open puts it into
+  step 1 with its values in step 2. `DELETE /api/jobs/<id>` cancels and forgets a job. Everything is in memory
+  only (`docs/adr/0005-document-jobs-in-memory.md`).
+- **Notifications** (`ui/notifications.js`): opt-in in Settings; shown only when the window is not in front and
+  never with file names, text or values.
 - **Theme**: CSS tokens in `style.css`; `js/theme-boot.js` applies a chosen theme before the first paint,
   `ui/theme.js` switches between System, Light and Dark.
 - **Server** (`server/`): Node built-ins only. Configuration in `config.js`, routes in `index.js`,
@@ -85,7 +100,7 @@ AI tool the user has installed and logged in to.
 found when the app is started from the desktop), sets the server's environment (data folder, bundled helper,
 offline model folder), imports the unchanged `server/index.js` and waits for `listening`, then opens a window on
 `http://127.0.0.1:<port>` (port 47291, or a free one). The window has no Node access, can't navigate away or
-open new windows, gets no permissions, and every request that doesn't go to this machine is cancelled.
+open new windows, gets no permission except notifications (shown natively, with the app id set on Windows), and every request that doesn't go to this machine is cancelled.
 The installer carries the app code in `app.asar`, the helper built by PyInstaller in `resources/helper` and
 the model in `resources/models`. See `docs/adr/0003-desktop-app-electron.md`.
 
@@ -100,8 +115,10 @@ the same values as the CPU; if not, the CPU is used and the answer's `runtime.no
 ## Configuration as data
 - `config/adapters.json`: the CLIs, their arguments, how the prompt is passed, login hints and models.
 - `prompts/`: instructions, GLiNER labels and the never-sensitive word list; `<name>.<ext>` overrides
-  `<name>.default.<ext>`.
-- `settings.json`: the user's choices, written by the server with mode 0600.
+  `<name>.default.<ext>`. "Save" in the Prompts tab writes overrides through `server/prompts.js` into `prompts/`
+  in the data folder (the project folder, or the desktop app's data folder, served before the program's own files).
+- `settings.json`: the user's choices, written by the server to a new file with mode 0600 (on Windows an access
+  list for the current user only, set with `icacls`) and renamed over the old one.
 
 ## Not enabled yet
 - Direct API providers (Anthropic, OpenAI-compatible, Gemini) are parked in `parked/api-targets/` until

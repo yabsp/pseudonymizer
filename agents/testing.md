@@ -10,7 +10,14 @@ npm test             # fast suite with stand-ins, a few seconds
 npm run test:strict  # known gaps fail instead of being reported as TODO
 npm run test:model   # real GLiNER and GLiNER + Presidio on all documents, a few minutes, needs .venv
 DETECTION_ACCELERATOR=onnx-cpu npm run test:model   # the same baseline on other hardware; must give the same results
+npm run eval:corpus -- --corpus <folder>   # leaks, over-redaction and false hits on a corpus with ground truth
 ```
+`eval:corpus` runs the real detectors (GLiNER, GLiNER + Presidio, three sensitivities) and the app's own steps over
+every document of a corpus folder (`text/<id>.txt` or `extracted/<id>.md`, with `truth/<id>.json` listing the
+values to hide and the text to keep) and writes a summary to its `reports/` folder. Detector output is cached in
+the temp folder, so changes to patterns and the core re-run in seconds; about a quarter of the documents is held
+out and only reported in totals. Synthetic documents only. The npm scripts run through `scripts/test.mjs` and
+`scripts/check.mjs`, so they work the same on Linux, macOS and Windows and find `.venv`'s Python as the server does.
 
 ## What is where
 | Folder | Covers |

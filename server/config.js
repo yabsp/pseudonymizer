@@ -17,11 +17,15 @@ export const ADAPTERS_FILE = path.join(ROOT, 'config', 'adapters.json');
 const dataDir = process.env.PSEUDONYMIZER_DATA_DIR || ROOT;
 if (!path.isAbsolute(dataDir)) throw new Error(`PSEUDONYMIZER_DATA_DIR must be an absolute path, not "${dataDir}".`);
 export const SETTINGS_FILE = path.join(dataDir, 'settings.json');
+// Prompt files the user changed (prompts/<name>.<ext>): next to settings.json, so the desktop app can save them.
+export const USER_PROMPTS_DIR = path.join(dataDir, 'prompts');
 export const GLINER_HELPER = path.join(ROOT, 'python', 'gliner_helper.py');
 export const DOCUMENT_EXTRACTOR = path.join(ROOT, 'python', 'document_extraction.py');
 
 const venvPython = path.join(ROOT, '.venv', process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python');
-export const GLINER_PYTHON = process.env.GLINER_PYTHON || (fs.existsSync(venvPython) ? venvPython : 'python3');
+// Without .venv, the system's Python: "python" on Windows, where "python3" is often only the Microsoft Store's stand-in.
+const systemPython = process.platform === 'win32' ? 'python' : 'python3';
+export const GLINER_PYTHON = process.env.GLINER_PYTHON || (fs.existsSync(venvPython) ? venvPython : systemPython);
 
 // The desktop app ships the helper as one program (PyInstaller), started without Python or a script argument.
 const bundledHelper = process.env.DETECTION_HELPER;
@@ -36,6 +40,11 @@ export const DOCUMENT_COMMAND = bundledHelper
   : { command: GLINER_PYTHON, args: [DOCUMENT_EXTRACTOR], cwd: ROOT };
 export const MAX_PDF_BYTES = 50 * 1024 * 1024;
 export const DOCUMENT_TIMEOUT_MS = 30 * 60 * 1000;
+// The Documents list (server/jobs.js): text files as the browser's text importer allows, at most this many
+// documents in the list, and at most this much uploaded and not yet converted, held in memory.
+export const MAX_TEXT_BYTES = 5 * 1024 * 1024;
+export const MAX_JOBS = 50;
+export const MAX_WAITING_BYTES = 500 * 1024 * 1024;
 
 // "desktop" when started by the desktop app (desktop/main.js), which ships GLiNER but not Presidio.
 const appKind = process.env.PSEUDONYMIZER_APP || 'server';
@@ -46,6 +55,13 @@ export const AVAILABLE_DETECTORS = appKind === 'desktop' ? ['gliner', 'ollama'] 
 export const DOCUMENT_FORMATS = appKind === 'desktop' ? [] : ['pdf'];
 
 export const CLI_TIMEOUT_MS = 10 * 60 * 1000;
+// Where commands are looked up on Windows, as cmd.exe would: the folders on PATH, each name with the extensions
+// in PATHEXT. Read once at start; the desktop app sets PATH before it starts the server.
+export const COMMAND_SEARCH_PATH = (process.env.PATH || '').split(path.delimiter).filter(Boolean);
+export const WINDOWS_COMMAND_EXTENSIONS = (process.env.PATHEXT || '.COM;.EXE;.BAT;.CMD').split(';').filter(Boolean);
+// Windows' own tools (taskkill, whoami, icacls) are started from here, not looked up on PATH, where e.g. Git for
+// Windows puts a different whoami first.
+export const WINDOWS_TOOLS_DIR = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32');
 
 export const ALLOWED_HOSTS = [`localhost:${PORT}`, `127.0.0.1:${PORT}`];
 export const ALLOWED_ORIGINS = ALLOWED_HOSTS.map((host) => 'http://' + host);

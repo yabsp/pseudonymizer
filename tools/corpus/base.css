@@ -1,0 +1,27 @@
+@page { size: A4; }
+html { font-family: "Segoe UI", Arial, Helvetica, sans-serif; font-size: 10.5pt; line-height: 1.4; color: #111; }
+body { margin: 0; }
+h1 { font-size: 17pt; margin: 0.4em 0 0.5em; }
+h2 { font-size: 13pt; margin: 1em 0 0.4em; }
+h3 { font-size: 11pt; margin: 0.8em 0 0.3em; }
+p { margin: 0.35em 0 0.55em; }
+.small { font-size: 8.5pt; color: #333; }
+.right { text-align: right; }
+.center { text-align: center; }
+table { border-collapse: collapse; margin: 0.5em 0 0.8em; }
+table.grid { width: 100%; }
+table.grid th, table.grid td { border: 0.6pt solid #555; padding: 2pt 5pt; text-align: left; vertical-align: top; }
+table.grid th { background: #e8e8e8; }
+table.facts th { text-align: left; padding: 1pt 12pt 1pt 0; font-weight: 600; vertical-align: top; }
+table.facts td { padding: 1pt 0; }
+td.num, th.num { text-align: right; }
+pre { font-family: Consolas, "Courier New", monospace; font-size: 8pt; white-space: pre-wrap; word-break: break-all; background: #f4f4f4; padding: 4pt; }
+.columns { column-count: 2; column-gap: 18pt; }
+.columns h1 { column-span: all; }
+.page-break { break-after: page; }
+math[display="block"] { margin: 0.5em 0; }
+math { font-size: 1.05em; }
+.as-image { display: inline-block; padding: 6pt 10pt; border: 1pt solid #666; background: #fbfaf5; font-size: 10pt; }
+.signature { font-family: "Segoe Script", "Brush Script MT", cursive; border: none; background: none; font-size: 12pt; }
+.stamp { border: 2pt solid #1d3f8a; color: #1d3f8a; font-weight: bold; border-radius: 6pt; transform: rotate(-3deg); }
+img.from-snippet { display: inline-block; }

@@ -140,6 +140,8 @@ def main():
     # stdout carries only the answers; libraries that print (download progress, warnings) go to stderr.
     answers = sys.stdout
     sys.stdout = sys.stderr
+    # The server writes UTF-8; Windows would otherwise decode stdin as cp1252 and garble "Müller" before detection.
+    sys.stdin.reconfigure(encoding='utf-8')
     for line in sys.stdin:
         if line.strip():
             answers.write(json.dumps(answer(line)) + '\n')

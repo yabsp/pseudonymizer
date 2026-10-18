@@ -1,3 +1,5 @@
+import { SWISS_PLACE_NAMES } from './swiss-places.js';
+
 // Any character that is not a digit, removed before the checksum.
 const NOT_A_DIGIT = /\D/g;
 
@@ -57,6 +59,22 @@ const TITLE = /^(?:Herr|Herrn|Frau|Mr|Mrs|Ms|Miss|Dr|Prof|Monsieur|Madame|Mme|Ml
 // Two letters in a row, so an initial ("H.") is not a name on its own.
 const TWO_LETTERS = /\p{L}{2}/u;
 const isMoreThanTitles = (candidate) => candidate.split(' ').some((word) => !TITLE.test(word) && TWO_LETTERS.test(word));
+
+// Month names and their usual short forms in German, French, Italian and English, for dates written out.
+const MONTH_NAMES = [
+  'Januar', 'Jänner', 'Februar', 'März', 'Maerz', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember',
+  'janvier', 'février', 'fevrier', 'mars', 'avril', 'juin', 'juillet', 'août', 'aout', 'septembre', 'octobre', 'novembre', 'décembre', 'decembre',
+  'gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno', 'luglio', 'agosto', 'settembre', 'ottobre', 'dicembre',
+  'January', 'February', 'March', 'May', 'June', 'July', 'October', 'December',
+  'Jan', 'Feb', 'Mär', 'Mar', 'Apr', 'Jun', 'Jul', 'Aug', 'Sep', 'Sept', 'Okt', 'Oct', 'Nov', 'Dez', 'Dec',
+].sort((a, b) => b.length - a.length).join('|');
+// A date as people write a birthday (for the i and u flags):
+// - day, month and year as numbers, separated by ".", "/" or "-", the year with 4 or 2 digits, not followed by
+//   another digit ("14.02.1961", "5.3.58", "03/22/1990");
+// - a day (optionally "1er" or "4."), a month name (optionally with "."), and a 4-digit year ("21 juin 1975",
+//   "4. Mai 1971", "17 luglio 1971", "1er mars 1980");
+// - an English month name, a day (optionally "st", "nd", "rd", "th"), an optional "," and a year ("May 4, 1971").
+const BIRTH_DATE = `\\d{1,2}[./-]\\d{1,2}[./-](?:\\d{4}|\\d{2})(?!\\d)|\\d{1,2}(?:er|\\.)?[ \\t]+(?:${MONTH_NAMES})\\.?[ \\t]+\\d{4}\\b|(?:${MONTH_NAMES})\\.?[ \\t]+\\d{1,2}(?:st|nd|rd|th)?,?[ \\t]+\\d{4}\\b`;
 
 const NINE_DIGITS = 9;
 const hasNineDigits = (candidate) => candidate.replace(NOT_A_DIGIT, '').length >= NINE_DIGITS;
@@ -119,6 +137,21 @@ export const PATTERNS = [
   // "assignee=" or "account=" (lookbehind; \b, so "superuser=" is not one), then at least 3 letters, digits,
   // "_", "." or "-" ("user=kschneider", "?owner=petra.vogel").
   { category: 'USERNAME', re: /(?<=\b(?:user|username|owner|uid|login|author|assignee|account)=)[\w.-]{3,}/giu },
+  // Username in quotes right after "user", "Benutzer", "utente", "utilisateur" or "role" and a space
+  // (lookbehind), as databases and logs write it: 3 or more letters, digits, "_", "." or "-", then the closing
+  // quote (lookahead): 'for user "praxis_app"', "utente 'mrossi'".
+  { category: 'USERNAME', re: /(?<=\b(?:user|Benutzer|utente|utilisateur|role)[ \t]+["'«])[\w.-]{3,}(?=["'»])/giu },
+  // The name of a computer in a Windows network path: right after "\\" at the start of the path (lookbehind,
+  // not after another "\"), letters, digits, "_", "." or "-" up to the next "\" ("\\nas01\backup",
+  // "\\srv-med01\lettere").
+  { category: 'HOST', re: /(?<=(?<!\\)\\\\)[\w.-]+(?=\\)/gu },
+  // A host name with a domain: 2 or more parts of lower-case letters, digits and "-" (not starting or ending
+  // with "-") joined by ".", and a top-level domain; with 3 or more parts for public ones ("praxis.kanzlei.ch",
+  // "db-prod-02.sonnenberg.example", "www.lurati-ghisletta.example.ch"), with 2 for the ones of internal
+  // networks and examples ("nas.local", "kanzlei.internal"), so public sites such as "admin.ch" stay. Not
+  // inside a longer name or right after "@" (an e-mail address is found as a whole); lower case only, so
+  // "ASP.NET" stays.
+  { category: 'HOST', re: /(?<![\w.@-])(?:(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.){2,}(?:ch|li|de|at|fr|it|com|net|org|io|eu|swiss|info|biz|cloud|app|dev)|(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+(?:local|lan|internal|intra|intranet|corp|example|test|home|localdomain))(?![\w-]|\.[a-z0-9])/gu },
   // Access keys and tokens in the formats of well-known services, wherever they stand: Stripe ("sk_live_",
   // "pk_test_", "rk_live_" and 10 or more letters or digits), OpenAI and Anthropic ("sk-", optionally "proj-"
   // or "ant-", then 16 or more letters, digits, "_" or "-"), GitHub ("ghp_", "gho_", "ghu_", "ghs_", "ghr_" or
@@ -154,11 +187,21 @@ export const PATTERNS = [
   // and up to 6 characters such as ": " (lookbehind); not followed by another "/" or digit, so a full date
   // is left to DATE.
   { category: 'DATE', re: /(?<=\b(?:exp|expiry|expiration|expires|valid until|gültig bis|Ablaufdatum|Ablauf|échéance|scadenza)\b[^\n\p{L}\p{N}]{0,6})\d{1,2}\/(?:\d{4}|\d{2})(?![\/\d])/giu },
+  // A date of birth right after a word that announces one, in German, French, Italian or English (lookbehind,
+  // any case; not right after a letter, so "aîné le 3 mai" stays): "geb.", "geboren", "Geburtsdatum",
+  // "Geb.-Datum", "Geburtstag", "né", "née", "né(e)", "date de naissance", "nato", "nata", "nato/a", "data di
+  // nascita", "DOB", "D.O.B.", "born", "date of birth", "birth date", "birthdate" or "birthday", optionally
+  // "le", "il", "am", "on" or "the", and up to 6 characters that are no letter or digit (": ", " = "). The date:
+  // see BIRTH_DATE.
+  { category: 'DATE', re: new RegExp(`(?<=(?<!\\p{L})(?:geb\\.|geboren|Geburtsdatum|Geb\\.-Datum|Geburtstag|né|née|né\\(e\\)|date de naissance|nato|nata|nato\\/a|data di nascita|DOB|D\\.O\\.B\\.|born|date of birth|birth ?date|birthday)(?:[ \\t]+(?:le|il|am|on|the))?[^\\n\\p{L}\\p{N}]{0,6})(?:${BIRTH_DATE})`, 'giu') },
+  // A year of birth alone after "Jahrgang" (lookbehind): 4 digits from 1900 to 2099 ("Jahrgang 1961").
+  { category: 'DATE', re: /(?<=\bJahrgang[ \t]+)(?:19|20)\d{2}\b/gu },
   // An ID right after a word that announces one (lookbehind), in German, French, Italian or English:
   // - a word: "ID", "No", "Nr", "Number", "Nummer" (also at the end of a word, "Seriennummer"), "Ref",
   //   "Dossier", "Akte", "Ticket", "Case", "Incident", "Claim", "Code", "Group", "Member", "Policy", "VIN",
   //   "DL" (not after "/", so the unit "g/dL" stays), "License", "Account", "Identifier", "NPI", "Patient",
-  //   "paziente" and others, or "_id", "_no", "_nr" or "_number" at the end of a key in code
+  //   "paziente", "caso", "matricule", "personale" (staff number), "GLN" and others, or "_id", "_no", "_nr"
+  //   or "_number" at the end of a key in code
   //   ("client_id=88213"); then up to 6 characters that are no letter or digit (": ", " # ", "."), and
   //   optionally "is", "ist", "est", "è" or "lautet" and a space ("code is REF-1");
   // - or "#", "N.", "N°" or "Nº" and optional spaces ("Fattura N. 2026/0458", "permis B n° 1234567").
@@ -170,12 +213,20 @@ export const PATTERNS = [
   // - letters or digits, possibly joined by ".", "/", "_" or "-" ("4471", "2026/LT/0457", "123.456.789-0",
   //   "4A_123/2026"), with at least one digit (lookahead (?=...)), so "Ticket: open" stays.
   // A full stop or comma after it is not part of it. Diagnosis codes ('code="M54.5"') stay, see isIdAfterLabel.
-  { category: 'ID', re: /(?<=(?:\b(?:ID|No|Nr|Number|Numéro|Numero|Nummer|Ref|Réf|Referenz|Référence|Riferimento|Dossier|Akte|Aktenzeichen|Ticket|Case|Incident|Claim|Code|Group|Member|Policy|Police|Polizza|VIN|(?<!\/)DL|License|Licence|Permis|Account|Konto|Identifier|NPI|MRN|PID|S\/N|SN|Serial|Patient|Patientin|patiente|paziente)|_(?:ID|No|Nr|Number)|\p{Ll}(?:nummer|nr))\b[^\n\p{L}\p{N}]{0,6}(?:(?:is|ist|est|è|lautet)[ \t]+)?|(?:#|\bN[.°º])[ \t]*)(?:(?!(?:ID|No|Nr)\b)\p{L}{1,4}(?: \p{N}{2,})+(?![\p{L}\p{N}]|[.\/-]\p{N})|(?=[\p{L}\p{N}./_-]*\p{N})[\p{L}\p{N}]+(?:[./_-][\p{L}\p{N}]+)*)/giu, isValid: isIdAfterLabel },
-  // A reference code: 1 or more capital letters, optionally more parts of capitals or digits, then a "-" and
-  // a part of at least 4 digits, then optionally more such parts ("INC-20419", "CONF-2026-X8891",
-  // "HC-2026-001942", "REF-99482-XYZ", patient numbers such as "P-104233"); not right after a letter, digit,
-  // "_" or "-" ((?<![\w-]), so never a part of a longer code) and \b at the end. Short codes such as "ICD-10" stay.
-  { category: 'ID', re: /(?<![\w-])[A-Z]+(?:-[A-Z0-9]+)*-\d{4,}(?:-[A-Z0-9]+)*\b/g },
+  { category: 'ID', re: /(?<=(?:\b(?:ID|No|Nr|Number|Numéro|Numero|Nummer|Ref|Réf|Referenz|Référence|Riferimento|Dossier|Akte|Aktenzeichen|Ticket|Case|Incident|Claim|Code|Group|Member|Policy|Police|Polizza|VIN|(?<!\/)DL|License|Licence|Permis|Account|Konto|Identifier|NPI|MRN|PID|S\/N|SN|Serial|Patient|Patientin|patiente|paziente|caso|matricule|matricola|Matrikel|personale|GLN)|_(?:ID|No|Nr|Number)|\p{Ll}(?:nummer|nr))\b[^\n\p{L}\p{N}]{0,6}(?:(?:is|ist|est|è|lautet)[ \t]+)?|(?:#|\bN[.°º])[ \t]*)(?:(?!(?:ID|No|Nr)\b)\p{L}{1,4}(?: \p{N}{2,})+(?![\p{L}\p{N}]|[.\/-]\p{N})|(?=[\p{L}\p{N}./_-]*\p{N})[\p{L}\p{N}]+(?:[./_-][\p{L}\p{N}]+)*)/giu, isValid: isIdAfterLabel },
+  // A reference code: 1 or more capital letters and optional digits, optionally more parts of capitals or
+  // digits, then a "-" and a part of at least 4 digits, then optionally more such parts ("INC-20419",
+  // "CONF-2026-X8891", "HC-2026-001942", "REF-99482-XYZ", patient numbers such as "P-104233", case numbers such
+  // as "C26-118734"); not right after a letter, digit, "_" or "-" ((?<![\w-]), so never a part of a longer code)
+  // and \b at the end. Short codes such as "ICD-10" stay.
+  { category: 'ID', re: /(?<![\w-])[A-Z]+\d*(?:-[A-Z0-9]+)*-\d{4,}(?:-[A-Z0-9]+)*\b/g },
+  // A Swiss ZSR number (the clearing number of a doctor or therapist) after "ZSR", optionally "-Nr." or "-Nr",
+  // and up to 6 characters such as ": " (lookbehind): a capital letter, an optional space, 4 digits, "." and 2
+  // digits ("ZSR-Nr. K 2291.47", "ZSR H123456" is left to the codes below).
+  { category: 'ID', re: /(?<=\bZSR(?:-Nr\.?)?[^\n\p{L}\p{N}]{0,6})[A-Z] ?\d{4}\.\d{2}\b/gu },
+  // A document number that mixes capitals and digits, as ID cards do: 1 to 3 capitals, 1 to 4 digits, 1 to 3
+  // capitals and 2 or more digits ("C7Q20984", "AB12CD345"), not inside a word or number.
+  { category: 'ID', re: /(?<![\p{L}\p{N}])[A-Z]{1,3}\d{1,4}[A-Z]{1,3}\d{2,}(?![\p{L}\p{N}])/gu },
   // The same the other way round: 3 or more digits, optionally more parts, then a "-" and a part of 2 or more
   // capital letters, then optionally more parts ("4471-ZRH", "2026-ZH-0193"), with the same boundaries.
   { category: 'ID', re: /(?<![\w-])\d{3,}(?:-[A-Z0-9]+)*-[A-Z]{2,}(?:-[A-Z0-9]+)*\b/g },
@@ -249,13 +300,19 @@ export const PATTERNS = [
   // US city, state and ZIP code: 1 to 3 capitalized words, ", ", 2 capitals and 5 digits, optionally "-" and
   // 4 more ("New York, NY 10012", "Portland, OR 97205-1234").
   { category: 'ADDRESS', re: /\b[A-Z][a-z]+(?: [A-Z][a-z]+){0,2}, [A-Z]{2} \d{5}(?:-\d{4})?\b/g },
-  // Postal code and town at the start of a line (after optional spaces, m flag) or after ", ": 4 or 5 digits,
-  // optionally after "CH-", "D-", "F-", "I-" or "A-", a space, and the town: words starting with a capital
-  // (letters, "'" or "-", and a "." only before a space, as in "St. Gallen"), possibly joined by "am", "bei",
-  // "b.", "sur", "de", "la", "di" and similar ("8800 Thalwil", "1752 Villars-sur-Glâne", "9001 St. Gallen",
-  // "2300 La Chaux-de-Fonds", "3294 Büren an der Aare"). Only when the end of the line, ",", ";", ")" or "."
-  // follows (lookahead), so "2014 Mandant seit" stays.
-  { category: 'ADDRESS', re: /(?<=^[ \t]*|, )(?:(?:CH|D|F|I|A)-)?\d{4,5} \p{Lu}[\p{L}'-]*(?:\.(?= ))?(?: (?:(?:am|an|im|bei|b\.|ob|der|sur|sous|de|des|la|le|les|en|di|al|del) )*\p{Lu}[\p{L}'-]*(?:\.(?= ))?)*(?=[ \t]*(?:$|[,;).]))/gmu },
+  // Postal code and town at the start of a line (after optional spaces, m flag), after ", " or "," or in a
+  // table cell (after ";", "|" or a tab and an optional space): 4 or 5 digits, optionally after "CH-", "D-",
+  // "F-", "I-" or "A-", a space, and the town: words starting with a capital (letters, "'" or "-", and a "."
+  // only before a space, as in "St. Gallen"), possibly joined by "am", "bei", "b.", "sur", "de", "la", "di",
+  // "sopra" and similar, or a second name after "/" ("8800 Thalwil", "1752 Villars-sur-Glâne", "9001 St.
+  // Gallen", "2300 La Chaux-de-Fonds", "3294 Büren an der Aare", "6979 Brè sopra Lugano", "2502 Biel/Bienne").
+  // Only when the end of the line, ",", ";", ")", ".", "|" or a tab follows (lookahead), so "2014 Mandant seit"
+  // stays.
+  { category: 'ADDRESS', re: /(?<=^[ \t]*|,[ ]?|[;|\t][ ]?)(?:(?:CH|D|F|I|A)-)?\d{4,5} \p{Lu}[\p{L}'-]*(?:\.(?= ))?(?:\/\p{Lu}[\p{L}'-]*)?(?: (?:(?:am|an|im|bei|b\.|ob|der|sur|sous|de|des|la|le|les|en|di|al|del|sopra|sotto) )*\p{Lu}[\p{L}'-]*(?:\.(?= ))?)*(?=[ \t]*(?:$|[,;).|\t]))/gmu },
+  // The same right after a word of 2 or more letters and a space, as a table cell or a signature line writes
+  // an institution and its place ("Studienzentrum Limmattal 8952 Schlieren |"), but only when the end of the line,
+  // ",", ";", "|" or a tab follows, so "seit 2014 Mandant." stays.
+  { category: 'ADDRESS', re: /(?<=\p{L}{2,} )(?:(?:CH|D|F|I|A)-)?\d{4,5} \p{Lu}[\p{L}'-]*(?:\.(?= ))?(?:\/\p{Lu}[\p{L}'-]*)?(?: (?:(?:am|an|im|bei|b\.|ob|der|sur|sous|de|des|la|le|les|en|di|al|del|sopra|sotto) )*\p{Lu}[\p{L}'-]*(?:\.(?= ))?)*(?=[ \t]*(?:$|[,;|\t]))/gmu },
   // German or Swiss street: a word starting with a capital and ending in "strasse", "straße", "gasse",
   // "weg", "platz" or "allee", a space and a house number with an optional letter ("Rebgasse 21",
   // "Lindenhofweg 3", "Technikumstrasse 88a").
@@ -276,12 +333,192 @@ export const PATTERNS = [
   // PHONE with dots: 3 to 5 groups of 2 to 4 digits separated by "." ("415.555.8822", "044.555.22.33"),
   // not inside a longer number or word; kept only with at least 9 digits, so dates ("02.09.2026") stay.
   { category: 'PHONE', re: /(?<![\p{L}\p{N}.])\+?\d{2,4}(?:\.\d{2,4}){2,4}(?![\p{L}\p{N}]|\.\d)/gu, isValid: hasNineDigits },
+  // The name of a computer as networks name it, without a domain (after the ID patterns, so a reference code
+  // such as "SEC-INT-441" stays an ID), not inside a longer name, path, address or host name with a domain
+  // ((?<![\w.@\/\\-]) and (?![\w-]|\.\w)):
+  // - lower case: 2 or more letters, optionally more parts, "-", and a last part of letters and then 2 or more
+  //   digits ("sur-nb002", "sgrh-scan03"), or 3 or more parts ending in 2 or more digits ("db-billing-01"),
+  //   so "sha-256" and "covid-19" stay;
+  // - capitals: 3 or more parts, the last of 2 or 3 digits ("ETUDE-PC-07", "LT-LMO-05"), so "ICD-10" stays.
+  { category: 'HOST', re: /(?<![\w.@\/\\-])(?:[a-z]{2,}(?:-[a-z0-9]+)*-[a-z]+\d{2,}|[a-z]{2,}(?:-[a-z0-9]+)+-\d{2,}|[A-Z]{2,}(?:-[A-Z0-9]+)+-\d{2,3})(?![\w-]|\.\w)/gu },
 ];
 
+// The labels of fields and table columns whose values identify someone, by the category of the values; a label
+// counts when it starts with one of the words (any case), as in "Name", "Name, Vorname", "Telefon privat",
+// "AHV-Nr.", "first_name". Bare "ID", "Nr." and "#" columns are left out: they are mostly row numbers.
+// INITIALS is a column of people's initials ("G.H."), hidden as PERSON.
+const FIELD_LABELS = [
+  { category: 'INITIALS', words: ['initials', 'initialen', 'initiales', 'iniziali', 'kürzel', 'visum'] },
+  { category: 'PERSON', words: ['name', 'vorname', 'nachname', 'familienname', 'first name', 'first_name', 'firstname', 'last name', 'last_name', 'lastname', 'full name', 'given name', 'surname', 'nom', 'prénom', 'prenom', 'nome', 'cognome', 'patient', 'patientin', 'patiente', 'paziente', 'klient', 'klientin', 'client', 'cliente', 'mandant', 'mandantin', 'mitarbeiter', 'mitarbeiterin', 'employee', 'collaborateur', 'collaboratrice', 'collaboratore', 'dipendente', 'kontaktperson', 'contact person', 'ansprechpartner', 'ansprechperson', 'gegenpartei', 'contrepartie', 'controparte', 'counterparty', 'empfänger', 'begünstigter', 'bénéficiaire', 'beneficiario', 'beneficiary', 'payee', 'auftraggeber', 'titulaire', 'kontoinhaber', 'inhaber', 'account holder', 'versicherte', 'versicherter', 'assuré', 'assurée', 'assicurato', 'assicurata', 'hausarzt', 'hausärztin', 'médecin traitant', 'medico curante', 'zuweiser', 'zuweiserin'] },
+  { category: 'DATE', words: ['geburtsdatum', 'geb.-datum', 'geb. datum', 'geb.', 'geboren', 'jahrgang', 'date of birth', 'birth date', 'birthdate', 'dob', 'date de naissance', 'né le', 'née le', 'data di nascita', 'nato il', 'nata il'] },
+  { category: 'ADDRESS', words: ['adresse', 'wohnadresse', 'privatadresse', 'anschrift', 'strasse', 'straße', 'wohnort', 'domizil', 'plz/ort', 'plz ort', 'address', 'street', 'city', 'domicile', 'rue', 'localité', 'npa/localité', 'indirizzo', 'domicilio', 'residenza', 'località', 'cap/località'] },
+  { category: 'EMAIL', words: ['e-mail', 'email', 'mail', 'courriel', 'posta elettronica'] },
+  { category: 'PHONE', words: ['telefon', 'tel.', 'tel', 'phone', 'mobile', 'mobil', 'natel', 'handy', 'téléphone', 'portable', 'telefono', 'cellulare'] },
+  { category: 'ID', words: ['ahv', 'avs', 'ssn', 'social security', 'versichertennummer', 'versicherten-nr', 'versicherungsnummer', 'iban', 'konto', 'compte', 'conto', 'account number', 'patienten-id', 'patientennummer', 'patienten-nr', 'pid', 'mrn', 'personalnummer', 'personal-nr', 'matricule', 'matricola', 'kundennummer', 'kunden-nr', 'customer id', 'customer number', 'policy', 'police', 'polizza', 'policennummer', 'documento', 'pass', 'passport', 'passeport', 'passaporto', 'ausweis', 'identitätskarte', "carte d'identité", "carta d'identità", 'kennzeichen', 'plaque', 'targa', 'license plate', 'fallnummer', 'fall-nr', 'dossier', 'aktenzeichen', 'case number', 'subject id', 'subject no', 'subject number', 'subject-id', 'randomisation no', 'randomization no', 'randomisation number', 'randomization number', 'screening no', 'screening number', 'probanden-nr', 'probandennummer', 'teilnehmer-nr', 'teilnehmernummer', 'studien-id', 'numéro de sujet', 'n° de sujet', 'numero soggetto', 'id soggetto'] },
+  { category: 'USERNAME', words: ['username', 'user name', 'benutzer', 'benutzername', 'login', 'utente', 'utilisateur', 'nom d’utilisateur'] },
+];
+// Markdown emphasis and a closing ":" around a label ("**Name:**").
+const LABEL_DECORATION = /^[*_\s]+|[*_:\s]+$/g;
+// A label word must end where a word ends: not followed by a letter or digit ("name" is not "namensänderung").
+const LABEL_END = /^(?![\p{L}\p{N}])/u;
+
+function categoryOfLabel(cell) {
+  const label = cell.replace(LABEL_DECORATION, '').toLowerCase();
+  const match = FIELD_LABELS.find(({ words }) => words.some((word) => label.startsWith(word) && LABEL_END.test(label.slice(word.length))));
+  return match?.category ?? null;
+}
+
+// A table cell with something in it: a letter or a digit.
+const HAS_CONTENT = /[\p{L}\p{N}]/u;
+const HAS_DIGIT = /\p{N}/u;
+const MIN_ID_LENGTH = 4;
+// Initials in a cell: a capital, then up to 9 letters, ".", "-" or spaces ("G.H.", "AS-M", "J. v. d. M.").
+const INITIALS_CELL = /^\p{Lu}[\p{L}. -]{0,9}$/u;
+// What a cell of each kind of column must look like to be hidden; an ID or date without a digit ("offen",
+// "unbekannt") or a short row number is not one.
+const CELL_CHECKS = {
+  PERSON: isMoreThanTitles,
+  INITIALS: (cell) => INITIALS_CELL.test(cell),
+  DATE: (cell) => HAS_DIGIT.test(cell),
+  ID: (cell) => HAS_DIGIT.test(cell) && cell.length >= MIN_ID_LENGTH,
+};
+const isCellValue = (cell, category) => HAS_CONTENT.test(cell) && (CELL_CHECKS[category] ?? (() => true))(cell);
+
+// Quotes around a CSV cell ("\"Muster, Hans\"").
+const CELL_QUOTES = /^"|"$/g;
+// The row of dashes under a Markdown table header: cells of "-" with optional ":" for the alignment ("|:---|---:|").
+const MARKDOWN_RULE = /^:?-{2,}:?$/;
+// Characters that separate the cells of a table: Markdown "|", and the ";", tab and "," of CSV exports.
+const CELL_SEPARATORS = ['|', ';', '\t', ','];
+// A comma-separated line needs at least 2 commas to count as a table row, so ordinary sentences don't.
+const MIN_SEPARATORS = { ',': 2 };
+
+// A text in double quotes, as CSV exports write a cell that contains the separator ("work permit G, since 2026").
+const QUOTED = /"[^"\n]*"/g;
+
+// Stands for a quoted text while a line is split; a control character that text from a document never contains.
+const QUOTE_MARK = '\u0000';
+const QUOTE_MARKS = /\u0000/g;
+
+/** The cells of a line; a separator inside a quoted CSV cell does not count. */
+function splitCells(line, separator) {
+  if (separator === '|') return line.split(separator);
+  const quoted = [];
+  const masked = line.replace(QUOTED, (text) => { quoted.push(text); return QUOTE_MARK; });
+  return masked.split(separator).map((cell) => cell.replace(QUOTE_MARKS, () => quoted.shift()));
+}
+
+function cellsOf(line, separator) {
+  let cells = splitCells(line, separator).map((cell) => cell.trim().replace(CELL_QUOTES, '').trim());
+  if (separator === '|') cells = cells.slice(line.trimStart().startsWith('|') ? 1 : 0, line.trimEnd().endsWith('|') ? -1 : undefined);
+  return cells;
+}
+
+const separatorCount = (line, separator) => splitCells(line, separator).length - 1;
+
+/** The tables in a text: runs of 2 or more lines with the same number of cells, each as a list of rows. */
+function tablesIn(text) {
+  const lines = text.split('\n');
+  const tables = [];
+  for (const separator of CELL_SEPARATORS) {
+    const isRow = (line) => separatorCount(line, separator) >= (MIN_SEPARATORS[separator] ?? 1);
+    for (let i = 0; i < lines.length; i++) {
+      if (!isRow(lines[i])) continue;
+      const count = separatorCount(lines[i], separator);
+      let end = i + 1;
+      while (end < lines.length && isRow(lines[end]) && separatorCount(lines[end], separator) === count) end++;
+      const rows = lines.slice(i, end).map((line) => cellsOf(line, separator)).filter((cells) => !cells.every((cell) => MARKDOWN_RULE.test(cell)));
+      if (rows.length >= 2) tables.push(rows);
+      i = end - 1;
+    }
+  }
+  return tables;
+}
+
+/**
+ * Values in tables, found by what their column header or their row label says: every cell under "Name",
+ * "Geburtsdatum" or "IBAN" in a CSV export or a Markdown table, and the cell next to such a label in a form
+ * laid out as a table ("| Geburtsdatum | 14.02.1961 |").
+ */
+export function detectInTables(text) {
+  const found = [];
+  // The column labels of the last table with labels, by its number of columns: a table continued after a page
+  // break comes without them, and PDF extraction takes its first row for the header.
+  const labelsByWidth = new Map();
+  for (const [first, ...rest] of tablesIn(text)) {
+    let columns = first.map(categoryOfLabel);
+    let [header, rows] = [first, rest];
+    if (columns.some(Boolean)) labelsByWidth.set(first.length, columns);
+    else if (labelsByWidth.has(first.length)) [columns, header, rows] = [labelsByWidth.get(first.length), null, [first, ...rest]];
+    for (const row of header ? [header, ...rows] : rows) {
+      if (row !== header && row.length === columns.length) row.forEach((cell, i) => columns[i] && found.push({ text: cell, category: columns[i] }));
+      // a header row ("| Name | Geburtsdatum |") has labels on both sides, a form row a label and a value
+      const rowLabel = row.length >= 2 && !categoryOfLabel(row[1]) ? categoryOfLabel(row[0]) : null;
+      if (rowLabel) found.push({ text: row[1], category: rowLabel });
+    }
+  }
+  return found.filter(({ text: cell, category }) => isCellValue(cell, category))
+    .map((value) => (value.category === 'INITIALS' ? { ...value, category: 'PERSON' } : value));
+}
+
+// A hyphen with spaces after it between letters or digits, as PDF extraction leaves a value that was wrapped in a
+// table cell ("TA- 2601178", "harrowgate- analytics.example").
+const WRAPPED_HYPHEN = /(?<=[\p{L}\p{N}])-[ ]+(?=[\p{L}\p{N}])/gu;
+
+/**
+ * The text with wrapped hyphens joined ("TA-2601178"), and for each of its characters the position in the
+ * original text, so a value found in the joined text can be taken from the original as it is written there.
+ */
+function joinWrappedHyphens(text) {
+  const positions = [];
+  let joined = '';
+  let last = 0;
+  for (const m of text.matchAll(WRAPPED_HYPHEN)) {
+    for (let i = last; i <= m.index; i++) positions.push(i);
+    joined += text.slice(last, m.index + 1);
+    last = m.index + m[0].length;
+  }
+  for (let i = last; i < text.length; i++) positions.push(i);
+  return { joined: joined + text.slice(last), positions };
+}
+
+const PLACE_NAMES = new Set(SWISS_PLACE_NAMES);
+// The longest place name in words, separated by spaces ("Le Mont-sur-Lausanne" has 2).
+const MAX_PLACE_WORDS = Math.max(...SWISS_PLACE_NAMES.map((name) => name.split(' ').length));
+// A word that may start or continue a place name: a letter, then letters, apostrophes, full stops or hyphens
+// ("Chaux-de-Fonds", "St.", "d'Arve"), not inside a longer word or number.
+const PLACE_WORD = /(?<![\p{L}\p{N}])\p{L}[\p{L}'.-]*/gu;
+// A line break or two or more spaces, which no place name spans (table cells, columns).
+const LINE_BREAK_OR_GAP = /\n|\s{2,}/;
+// Trailing full stops and hyphens that end the sentence or the line, not the name ("in Agno.").
+const TRAILING_PUNCTUATION = /[.-]+$/;
+// A court just before the town, whose seat stays readable ("Bezirksgericht Hochdorf", "Pretura di Mendrisio",
+// "Tribunal d'arrondissement de Lausanne", "Kantonsgericht Luzern"): a word ending in "gericht" or a French or
+// Italian court word, then up to 3 linking words ("di", "de", "d'arrondissement", "civil"), then the space.
+const COURT_BEFORE = /(?:\p{L}*gericht|Tribunal|Tribunale|Pretura|Cour|Corte|Justice de paix|Giudicatura di pace)(?: [\p{Ll}'’]+){0,3} $/u;
+
+/** Swiss towns named alone, without a postal code ("aus Hochdorf", "Ufficio dei registri, Mendrisio"). */
+export function detectPlaces(text) {
+  const words = [...text.matchAll(PLACE_WORD)].map((m) => ({ start: m.index, end: m.index + m[0].replace(TRAILING_PUNCTUATION, '').length }));
+  const found = [];
+  for (let i = 0; i < words.length; i++) {
+    for (let n = Math.min(MAX_PLACE_WORDS, words.length - i); n >= 1; n--) {
+      const last = words[i + n - 1];
+      const candidate = text.slice(words[i].start, last.end);
+      if (!PLACE_NAMES.has(candidate) || (n > 1 && LINE_BREAK_OR_GAP.test(candidate))) continue;
+      if (!COURT_BEFORE.test(text.slice(Math.max(0, words[i].start - 60), words[i].start))) found.push({ text: candidate, category: 'LOCATION' });
+      i += n - 1;
+      break;
+    }
+  }
+  return found;
+}
+
 export function detectWithPatterns(text) {
-  const found = PATTERNS.flatMap(({ category, re, isValid }) => [...text.matchAll(re)]
-    .map((m) => m[0])
-    .filter((value) => !isValid || isValid(value))
-    .map((value) => ({ text: value, category })));
+  const { joined, positions } = joinWrappedHyphens(text);
+  const asWritten = (m) => text.slice(positions[m.index], positions[m.index + m[0].length - 1] + 1);
+  const found = [...PATTERNS.flatMap(({ category, re, isValid }) => [...joined.matchAll(re)]
+    .filter((m) => !isValid || isValid(m[0]))
+    .map((m) => ({ text: asWritten(m), category }))), ...detectInTables(text), ...detectPlaces(text)];
   return found.filter((e, i) => found.findIndex((other) => other.text === e.text) === i);
 }

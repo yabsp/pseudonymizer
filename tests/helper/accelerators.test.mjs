@@ -2,11 +2,12 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { describe, it } from 'node:test';
+import { PYTHON } from '../helpers/python.mjs';
 import { FIXTURES, ROOT } from '../helpers/server.mjs';
 
 // Runs Python with python/ importable and the GLiNER stand-in, which finds the strings in FAKE_GLINER_ENTITIES.
 function runPython(code, entities = {}) {
-  const result = spawnSync('python3', ['-c', code], {
+  const result = spawnSync(PYTHON, ['-c', code], {
     cwd: path.join(ROOT, 'python'), encoding: 'utf8',
     env: { ...process.env, PYTHONPATH: path.join(FIXTURES, 'fake_gliner'), FAKE_GLINER_ENTITIES: JSON.stringify(entities) },
   });

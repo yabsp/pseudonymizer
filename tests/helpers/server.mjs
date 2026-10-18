@@ -5,8 +5,9 @@ import http from 'node:http';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { PYTHON } from './python.mjs';
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 export const FIXTURES = path.join(ROOT, 'tests', 'fixtures');
@@ -16,6 +17,27 @@ const SERVER_ENTRY = 'server/index.js';
 export const ADAPTERS_FILE = 'config/adapters.json';
 export const SETTINGS_FILE = 'settings.json';
 export const GLINER_HELPER = path.join(ROOT, 'python', 'gliner_helper.py');
+// For startServer's files: the copy's document reader replaced by a fake that needs no Docling.
+export const FAKE_DOCUMENT_READER = {
+  'python/document_extraction.py': fs.readFileSync(path.join(FIXTURES, 'fake_document_extraction.py'), 'utf8'),
+};
+
+const IS_WINDOWS = process.platform === 'win32';
+const TASKKILL = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'taskkill.exe');
+const FOLDER_IN_USE = ['EBUSY', 'EPERM', 'ENOTEMPTY'];
+
+/** Windows keeps a folder in use for a moment after the processes in it ended. */
+async function removeFolder(dir) {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      fs.rmSync(dir, { recursive: true, force: true });
+      return;
+    } catch (e) {
+      if (!FOLDER_IN_USE.includes(e.code) || attempt === 50) throw e;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  }
+}
 
 async function freePort() {
   const probe = net.createServer();
@@ -37,7 +59,7 @@ export async function startServer({ adapters = {}, env = {}, files = {} } = {}) 
 
   const port = await freePort();
   const child = spawn(process.execPath, [path.join(dir, SERVER_ENTRY)], {
-    env: { ...process.env, PORT: String(port), GLINER_PYTHON: 'python3', ...env },
+    env: { ...process.env, PORT: String(port), GLINER_PYTHON: PYTHON, ...env },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   let output = '';
@@ -64,10 +86,14 @@ export async function startServer({ adapters = {}, env = {}, files = {} } = {}) 
     }),
     async close() {
       if (child.exitCode === null && child.signalCode === null) {
-        child.kill();
-        await new Promise((resolve) => child.once('exit', resolve));
+        const exited = new Promise((resolve) => child.once('exit', resolve));
+        // On Windows, ending the server leaves the helpers it started running until they notice, and they keep
+        // the copy's folder in use, so the whole tree is ended.
+        if (IS_WINDOWS) spawnSync(TASKKILL, ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
+        else child.kill();
+        await exited;
       }
-      fs.rmSync(dir, { recursive: true, force: true });
+      await removeFolder(dir);
     },
   };
 }

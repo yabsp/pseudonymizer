@@ -1,5 +1,9 @@
-# User settings
+# User settings and the prompt files saved from the Prompts tab
 settings.json
+prompts/*.md
+prompts/*.txt
+!prompts/*.default.*
+!prompts/README.md
 
 # Local Python environment
 .venv/

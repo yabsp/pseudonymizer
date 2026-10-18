@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { PROMPTS_DIR, PUBLIC_DIR } from './config.js';
+import { PROMPTS_DIR, PUBLIC_DIR, USER_PROMPTS_DIR } from './config.js';
 import { send } from './http.js';
 
 const TYPES = {
@@ -17,12 +17,20 @@ function resolveFile(pathname) {
   return { dir, file: path.resolve(dir, '.' + (urlPath === '/' ? '/index.html' : urlPath)) };
 }
 
+/** A prompt file the user saved (in the data folder) wins over the shipped one of the same name. */
+function userPromptFile(dir, file) {
+  if (dir !== PROMPTS_DIR || USER_PROMPTS_DIR === PROMPTS_DIR) return null;
+  const userFile = path.join(USER_PROMPTS_DIR, path.relative(PROMPTS_DIR, file));
+  return fs.existsSync(userFile) ? userFile : null;
+}
+
 export function serveStatic(req, res) {
   const { dir, file } = resolveFile(new URL(req.url, 'http://x').pathname);
   if (!isInside(dir, file)) return send(res, 403, 'Forbidden', 'text/plain');
   if (isHidden(dir, file)) return send(res, 404, 'Not found', 'text/plain');
-  fs.readFile(file, (err, data) => {
+  const served = userPromptFile(dir, file) ?? file;
+  fs.readFile(served, (err, data) => {
     if (err) return send(res, 404, 'Not found', 'text/plain');
-    send(res, 200, data, TYPES[path.extname(file)] || 'application/octet-stream');
+    send(res, 200, data, TYPES[path.extname(served)] || 'application/octet-stream');
   });
 }
