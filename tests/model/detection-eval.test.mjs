@@ -2,16 +2,15 @@
 // RUN_MODEL_TESTS=1 (slow).
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import path from 'node:path';
 import { after, before, describe, it } from 'node:test';
 import { knownGap } from '../helpers/known-gaps.mjs';
 import { addDetected, addEntry, categorizePresidioEntities, COMMON_WORDS, detectWithPatterns, GLINER_LABELS, pseudonymize } from '../helpers/core.mjs';
-import { ROOT, startServer } from '../helpers/server.mjs';
+import { PYTHON } from '../helpers/python.mjs';
+import { startServer } from '../helpers/server.mjs';
 import { DOCUMENTS } from '../fixtures/documents.mjs';
 
-const PYTHON = path.join(ROOT, '.venv', process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python');
 const SKIP = !process.env.RUN_MODEL_TESTS ? 'set RUN_MODEL_TESTS=1 to run the real model'
-  : !fs.existsSync(PYTHON) ? 'GLiNER is not installed in .venv (see docs/setup.md)' : false;
+  : !fs.existsSync(PYTHON) ? 'GLiNER is not installed in .venv or GLINER_PYTHON (see docs/setup.md)' : false;
 const MODEL = 'urchade/gliner_multi_pii-v1';
 const THRESHOLD = 0.4; // "Balanced", the app's default
 // DETECTION_ACCELERATOR=onnx-cpu (or torch-cuda, onnx-directml, ...) runs the same baseline on other hardware, which
