@@ -24,7 +24,7 @@
       </svg>
       <div class="brand-text">
         <span class="brand-name">Pseudonymizer</span>
-        <span class="brand-tag">Sensitive values are replaced on this machine before anything is sent.</span>
+        <span class="brand-tag">Hidden on this computer before sending.</span>
       </div>
     </div>
     <nav class="tabs" role="tablist" aria-label="Sections">
@@ -64,7 +64,7 @@
             <span id="formulaText"></span>
             <button type="button" class="ghost small" id="convertFormulasBtn">Convert formulas</button>
           </p>
-          <p class="hint document-hint">Only the extracted text is used. The PDF itself, its images and hidden details (author, comments, attachments) are never sent.</p>
+          <p class="hint document-hint">Only the extracted text is used, never the PDF itself. <span class="info"><button type="button" class="info-btn" aria-label="More information" aria-describedby="info1">i</button><span class="info-tip" role="tooltip" id="info1">Only the extracted text is used. The PDF itself, its images and hidden details (author, comments, attachments) are never sent.</span></span></p>
           <details class="more">
             <summary>Show extracted text</summary>
             <pre id="documentText" class="output"></pre>
@@ -91,7 +91,7 @@
         <span class="num">2</span>
         <h2>Check what will be sent</h2>
       </div>
-      <p class="hint">Highlighted parts are replaced before sending. Click one to see the original or to keep it visible. If something is missing, add it under "Edit values".</p>
+      <p class="hint">Highlighted parts are replaced before sending. <span class="info"><button type="button" class="info-btn" aria-label="More information" aria-describedby="info2">i</button><span class="info-tip" role="tooltip" id="info2">Highlighted parts are replaced before sending. Click one to see the original or to keep it visible. If something is missing, add it under "Edit values".</span></span></p>
       <ul id="summary" class="chips" aria-label="Hidden values by kind"></ul>
       <pre id="pseudo" class="output" data-empty="The text to send appears here."></pre>
       <div id="valueInfo" class="value-info" role="region" aria-label="Selected value" hidden>
@@ -129,7 +129,7 @@
         <span class="num">3</span>
         <h2>Send to <span class="target-name">the AI model</span></h2>
       </div>
-      <p class="hint">The AI model receives one message made of these two parts. Nothing else leaves this computer.</p>
+      <p class="hint">The AI model receives only these two parts. <span class="info"><button type="button" class="info-btn" aria-label="More information" aria-describedby="info3">i</button><span class="info-tip" role="tooltip" id="info3">The AI model receives one message made of these two parts. Nothing else leaves this computer.</span></span></p>
       <div class="message" aria-label="The message that will be sent">
         <div class="message-part">
           <p class="part-title"><span class="part-num">1</span> <span id="partOneTitle">Your text, with the highlighted values replaced</span></p>
@@ -139,7 +139,7 @@
         <div class="message-part">
           <label class="part-title" for="extraPrompt"><span class="part-num">2</span> Your question or instructions <span class="optional">optional</span></label>
           <textarea id="extraPrompt" rows="2" placeholder="E.g. Summarize the letter and list the next steps."></textarea>
-          <p class="part-note">Sent exactly as you type it, without replacing anything. Don't put names or other confidential details here.</p>
+          <p class="part-note">Sent as you type it. Leave names out. <span class="info"><button type="button" class="info-btn" aria-label="More information" aria-describedby="info4">i</button><span class="info-tip" role="tooltip" id="info4">Sent exactly as you type it, without replacing anything. Don't put names or other confidential details here.</span></span></p>
           <p id="extraStatus" class="status" role="status"></p>
         </div>
       </div>
@@ -149,7 +149,7 @@
         <button type="button" class="ghost" id="saveFileBtn">Save as file</button>
         <span id="sendStatus" class="status" role="status"></span>
       </div>
-      <p class="hint after">The answer appears in step 4, with the original values put back in. "Save as file" saves part 1 as a Markdown file, for uploading to a chat yourself.</p>
+      <p class="hint after">The answer appears in step 4. <span class="info"><button type="button" class="info-btn" aria-label="More information" aria-describedby="info5">i</button><span class="info-tip" role="tooltip" id="info5">The answer appears in step 4, with the original values put back in. "Save as file" saves part 1 as a Markdown file, for uploading to a chat yourself.</span></span></p>
       <button type="button" class="link" id="pasteAnswerBtn">Already have an answer from another chat? Restore it</button>
     </section>
 
@@ -163,7 +163,7 @@
       <p id="reassembleStatus" class="status" role="status"></p>
       <details class="more" id="rawDetails">
         <summary>Answer before restoring</summary>
-        <p class="hint">What the model returned, with placeholders. You can also paste an answer from any chat here and restore it.</p>
+        <p class="hint">The answer, with placeholders. <span class="info"><button type="button" class="info-btn" aria-label="More information" aria-describedby="info6">i</button><span class="info-tip" role="tooltip" id="info6">What the model returned, with placeholders. You can also paste an answer from any chat here and restore it.</span></span></p>
         <textarea id="response" rows="8" aria-label="Model answer before restoring"></textarea>
         <div class="actions"><button type="button" class="ghost" id="reassembleBtn">Restore original values</button></div>
       </details>
@@ -177,13 +177,13 @@
         <button type="button" class="ghost small" id="addDocumentsBtn">Add files</button>
         <input type="file" id="documentFiles" multiple hidden>
       </div>
-      <p class="hint">Add several files at once (text or PDF). They are converted one after another on this machine, and the sensitive values are found, while you work on something else. Open a ready document to check it in step 2 and send it yourself; nothing is sent automatically. The list is kept only while the app runs.</p>
+      <p class="hint">Add several files; they are converted and checked on this computer. <span class="info"><button type="button" class="info-btn" aria-label="More information" aria-describedby="info7">i</button><span class="info-tip" role="tooltip" id="info7">Add several files at once (text or PDF). They are converted one after another on this machine, and the sensitive values are found, while you work on something else. Open a ready document to check it in step 2 and send it yourself; nothing is sent automatically. The list is kept only while the app runs.</span></span></p>
       <div class="drop-zone" id="documentsDropZone">
         <ol id="jobList" class="job-list" aria-label="Documents" data-empty="No documents yet. Drop files here or use Add files."></ol>
         <div class="drop-hint" aria-hidden="true">Drop the files to add them</div>
       </div>
       <label class="check"><input type="checkbox" id="jobDetect" checked> Find the sensitive values right after converting</label>
-      <label class="check"><input type="checkbox" id="jobFormulas"> Convert formulas in PDFs to LaTeX (about a minute per formula)</label>
+      <label class="check"><input type="checkbox" id="jobFormulas"> Convert formulas in PDFs to LaTeX (slower)</label>
       <p id="documentsStatus" class="status" role="status"></p>
     </section>
   </div>
@@ -191,7 +191,7 @@
   <div id="panel-settings" role="tabpanel" aria-labelledby="tab-settings" hidden>
     <section class="card">
       <h2>Detection</h2>
-      <p class="hint">Finds the sensitive values. Runs on this machine; your original text never leaves it.</p>
+      <p class="hint">Finds the sensitive values, on this computer. <span class="info"><button type="button" class="info-btn" aria-label="More information" aria-describedby="info8">i</button><span class="info-tip" role="tooltip" id="info8">Finds the sensitive values. Runs on this machine; your original text never leaves it.</span></span></p>
       <label class="field">Detector
         <select id="detector">
           <option value="gliner">GLiNER (fast, recommended)</option>
@@ -231,14 +231,14 @@
               <option value="en">English</option>
             </select>
           </label>
-          <p class="hint">Presidio adds a second name finder (spaCy) and checks for phone, card and bank numbers. It needs a language model per language, see docs/setup.md.</p>
+          <p class="hint">Adds a second name finder and more number checks. <span class="info"><button type="button" class="info-btn" aria-label="More information" aria-describedby="info9">i</button><span class="info-tip" role="tooltip" id="info9">Presidio adds a second name finder (spaCy) and checks for phone, card and bank numbers. It needs a language model per language, see docs/setup.md.</span></span></p>
         </div>
         <div data-detector="gliner presidio">
           <label class="field">GLiNER model <input id="glinerModel" value="urchade/gliner_multi_pii-v1"></label>
           <label class="field">Hardware
             <select id="accelerator"><option value="auto" selected>Automatic (recommended)</option></select>
           </label>
-          <p class="hint">Automatic uses a GPU if this computer has a usable one, otherwise the CPU. A GPU is only used after it found the same values as the CPU on a test text. PDF documents use the same hardware where possible.</p>
+          <p class="hint">Automatic uses a GPU if there is a usable one. <span class="info"><button type="button" class="info-btn" aria-label="More information" aria-describedby="info10">i</button><span class="info-tip" role="tooltip" id="info10">Automatic uses a GPU if this computer has a usable one, otherwise the CPU. A GPU is only used after it found the same values as the CPU on a test text. PDF documents use the same hardware where possible.</span></span></p>
           <p id="hardwareStatus" class="status field" role="status"></p>
           <details class="more">
             <summary>This computer</summary>
@@ -254,15 +254,16 @@
 
     <section class="card">
       <h2>Target model</h2>
-      <p class="hint">Receives only the pseudonymized prompt, through an AI tool installed on this machine and logged in with your own subscription.</p>
+      <p class="hint">Receives only the pseudonymized prompt. <span class="info"><button type="button" class="info-btn" aria-label="More information" aria-describedby="info11">i</button><span class="info-tip" role="tooltip" id="info11">Receives only the pseudonymized prompt, through an AI tool installed on this machine and logged in with your own subscription.</span></span></p>
       <label class="field">AI tool <select id="cliAdapter"></select></label>
       <label class="field" id="modelSelectLabel">Model <select id="modelSelect"></select></label>
       <label class="field" id="modelInputLabel">Model name <input id="model" placeholder="Leave empty for the tool's default"></label>
     </section>
     <section class="card">
       <h2>Notifications</h2>
-      <p class="hint">A short system message when a document is ready or detection is done while you work in another window. It never contains file names, text or values.</p>
+      <p class="hint">A short message when a document is ready, without any content. <span class="info"><button type="button" class="info-btn" aria-label="More information" aria-describedby="info12">i</button><span class="info-tip" role="tooltip" id="info12">A short system message when a document is ready or detection is done while you work in another window. It never contains file names, text or values.</span></span></p>
       <label class="check"><input type="checkbox" id="notify"> Notify me when work is done</label>
+      <button type="button" class="ghost small" id="testNotifyBtn">Send a test notification</button>
       <p id="notifyStatus" class="status" role="status"></p>
     </section>
     <p id="settingsStatus" class="status saved" role="status"></p>
@@ -271,7 +272,7 @@
   <div id="panel-prompts" role="tabpanel" aria-labelledby="tab-prompts" hidden>
     <section class="card">
       <h2>Prompts</h2>
-      <p class="hint">Loaded from the <code>prompts</code> folder. A file like <code>rules.md</code> always wins over <code>rules.default.md</code>. Changes here are used right away; "Save" keeps them as your own files (<code>rules.md</code> and so on), the shipped defaults stay as they are.</p>
+      <p class="hint">"Save" keeps your changes as your own files. <span class="info"><button type="button" class="info-btn" aria-label="More information" aria-describedby="info13">i</button><span class="info-tip" role="tooltip" id="info13">Loaded from the <code>prompts</code> folder. A file like <code>rules.md</code> always wins over <code>rules.default.md</code>. Changes here are used right away; "Save" keeps them as your own files (<code>rules.md</code> and so on), the shipped defaults stay as they are.</span></span></p>
       <label class="field">What GLiNER looks for, one <code>label = CATEGORY</code> per line <span id="src-gliner-labels" class="src"></span>
         <textarea id="glinerLabels" rows="10"></textarea>
       </label>

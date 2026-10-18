@@ -20,6 +20,9 @@ describe('document jobs', () => {
   const list = async () => (await server.request({ path: '/api/jobs' })).json();
   const get = (id) => server.request({ path: '/api/jobs/' + id });
   const remove = (id, headers = { Origin: server.origin }) => server.request({ method: 'DELETE', path: '/api/jobs/' + id, headers });
+  const move = (id, body, headers = { Origin: server.origin, 'Content-Type': 'application/json' }) => server.request({
+    method: 'POST', path: `/api/jobs/${id}/move`, body: typeof body === 'string' ? body : JSON.stringify(body), headers,
+  });
   const usedFiles = () => fs.readFileSync(log, 'utf8').trim().split('\n').filter(Boolean);
   async function waitFor(id, states) {
     for (let i = 0; i < 200; i++) {
@@ -113,6 +116,32 @@ describe('document jobs', () => {
     assert.match(states.find((j) => j.id === failed.id).error, /broken PDF/);
     assert.match(states.find((j) => j.id === crashed.id).error, /document reader stopped \(exit code 3\)/);
     assert.equal((await get(failed.id)).json().result, null);
+    await removeAll();
+  });
+
+  it('converts waiting documents in the order of the list, also after one was moved', async () => {
+    const first = (await add('pdf', pdf('SLOW 1'))).json();
+    const slow = (await add('pdf', pdf('SLOW 2'))).json();
+    const quick = (await add('pdf', pdf('quick'))).json();
+    await waitFor(first.id, ['running']);
+    const moved = await move(quick.id, { position: 2 });
+    assert.equal(moved.status, 200, moved.body);
+    assert.deepEqual(moved.json().map((j) => j.id), [first.id, quick.id, slow.id]);
+    assert.deepEqual((await list()).map((j) => j.id), [first.id, quick.id, slow.id]);
+    await remove(first.id);
+    await waitFor(quick.id, ['ready']);
+    assert.notEqual((await list()).find((j) => j.id === slow.id).state, 'ready', 'the slow one waited for the moved one');
+    await removeAll();
+  });
+
+  it('refuses a move outside the list, of an unknown document and from other sites', async () => {
+    const job = (await add('text', Buffer.from('x'))).json();
+    for (const body of [{ position: 0 }, { position: 2 }, { position: '1' }, {}, 'not json']) {
+      assert.equal((await move(job.id, body)).status, 400, JSON.stringify(body));
+    }
+    assert.equal((await move('00000000-0000-0000-0000-000000000000', { position: 1 })).status, 404);
+    assert.equal((await move(job.id, { position: 1 }, { Origin: 'https://attacker.example', 'Content-Type': 'application/json' })).status, 403);
+    assert.equal((await move(job.id, { position: 1 })).status, 200);
     await removeAll();
   });
 

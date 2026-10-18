@@ -10,8 +10,25 @@ const isSupported = () => 'Notification' in globalThis;
  */
 export function notify(message) {
   if (!isSupported() || !$('notify').checked || Notification.permission !== 'granted' || document.hasFocus()) return;
+  show(message);
+}
+
+function show(message) {
   const notification = new Notification('Pseudonymizer', { body: message });
   notification.onclick = () => window.focus();
+  notification.onerror = () => setStatus('notifyStatus', 'The system refused to show the notification.', true);
+  return notification;
+}
+
+/** Shows one right away, also while this window is in front, so the user can see that the system lets them through. */
+async function sendTest() {
+  if (!isSupported()) return explainPermission();
+  if (Notification.permission === 'default') await Notification.requestPermission();
+  if (Notification.permission !== 'granted') {
+    return setStatus('notifyStatus', "Notifications are not allowed for this page. Allow them in the browser's site settings.", true);
+  }
+  show('This is a test. Notifications appear like this when work is done.');
+  setStatus('notifyStatus', 'Sent. If nothing appeared, check that the system allows notifications for this app or browser and that "Do not disturb" is off. They appear only while this window is not in front.');
 }
 
 function explainPermission() {
@@ -37,6 +54,10 @@ export const showNotificationState = explainPermission;
 
 export function initNotifications() {
   $('notify').disabled = !isSupported();
+  $('testNotifyBtn').disabled = !isSupported();
+  $('testNotifyBtn').addEventListener('click', () => {
+    sendTest().catch((e) => setStatus('notifyStatus', 'The test notification could not be shown: ' + e.message, true));
+  });
   $('notify').addEventListener('change', () => {
     if ($('notify').checked) turnOn().catch((e) => setStatus('notifyStatus', 'Notifications could not be turned on: ' + e.message, true));
     else explainPermission();

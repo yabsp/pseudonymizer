@@ -61,7 +61,7 @@ code { font-family: var(--mono); font-size: 0.9em; }
   max-width: 860px; margin: 0 auto; padding: 0 16px;
   display: flex; align-items: center; gap: 4px 16px; flex-wrap: wrap;
 }
-.brand { flex: 1 1 0; display: flex; align-items: center; gap: 10px; padding: 10px 0; min-width: 200px; }
+.brand { flex: 1 1 0; display: flex; align-items: center; gap: 14px; padding: 10px 0; min-width: 200px; }
 .brand-text { display: flex; flex-direction: column; min-width: 0; }
 /* The logo: a padlock whose body holds two blacked-out lines of text, in the theme's colors. */
 .logo { flex: none; width: 32px; height: 32px; }
@@ -113,6 +113,22 @@ main { max-width: 860px; margin: 0 auto; padding: 28px 16px 72px; }
 }
 .hint { margin: 0 0 14px; color: var(--muted); font-size: 0.88rem; }
 .hint.source { margin: 8px 0 0; }
+/* An "i" after a short hint; the full text shows while it is hovered or has the keyboard focus. */
+.info { position: relative; display: inline-block; margin-left: 3px; vertical-align: 1px; }
+.info-btn {
+  width: 17px; height: 17px; padding: 0; border: 1px solid var(--muted); border-radius: 50%; background: none;
+  color: var(--muted); font: italic 600 11px/15px Georgia, serif; cursor: help;
+}
+.info-btn:hover, .info-btn:focus-visible { border-color: var(--accent); color: var(--accent); }
+.info-tip {
+  display: none; position: absolute; z-index: 20; top: calc(100% + 6px); left: 50%; transform: translateX(-50%);
+  width: max-content; max-width: min(320px, calc(100vw - 32px)); padding: 8px 10px; border-radius: var(--radius-small);
+  background: var(--ink); color: var(--bg); box-shadow: var(--shadow); font-size: 0.82rem; font-weight: 400;
+  font-style: normal; line-height: 1.4; text-align: left;
+}
+.info-tip code { color: inherit; }
+.info:hover .info-tip, .info-btn:focus + .info-tip { display: block; }
+.info.dismissed .info-tip { display: none; }
 .actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
 
 /* Form controls */

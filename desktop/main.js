@@ -118,8 +118,9 @@ function openWindow(origin) {
 
 async function start() {
   blockInternet();
-  // Windows shows notifications only for an app with this id; the installer registers the same (build.appId).
-  if (process.platform === 'win32') app.setAppUserModelId(APP_ID);
+  // Windows shows notifications only for an app id with a Start menu entry: the installer registers APP_ID
+  // (build.appId); started from the project folder, only Electron's own path is known to Windows.
+  if (process.platform === 'win32') app.setAppUserModelId(app.isPackaged ? APP_ID : process.execPath);
   useTerminalSearchPath();
   const port = await choosePort();
   configureServer(port);

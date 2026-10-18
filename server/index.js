@@ -5,7 +5,7 @@ import { PORT } from './config.js';
 import { handleExtractPdf } from './documents.js';
 import { handleGliner, handleHardware, handlePresidio } from './gliner.js';
 import { isAllowedHost, send } from './http.js';
-import { addJob, getJob, listJobs, removeJob } from './jobs.js';
+import { addJob, getJob, listJobs, moveJob, removeJob } from './jobs.js';
 import { savePrompt } from './prompts.js';
 import { getSettings, saveSettings } from './settings.js';
 import { serveStatic } from './static.js';
@@ -23,6 +23,8 @@ const ROUTES = [
   // /api/jobs/<job id>, the id a UUID made of hex digits and "-"; the id is passed to the handler
   { method: 'GET', path: /^\/api\/jobs\/([\da-f-]+)$/, handler: getJob },
   { method: 'DELETE', path: /^\/api\/jobs\/([\da-f-]+)$/, handler: removeJob },
+  // /api/jobs/<job id>/move, the id as above
+  { method: 'POST', path: /^\/api\/jobs\/([\da-f-]+)\/move$/, handler: moveJob },
   // /api/prompts/<file>, a file name such as "rules.md"; savePrompt checks it against its list
   { method: 'PUT', path: /^\/api\/prompts\/([\w.-]+)$/, handler: savePrompt },
   { method: 'POST', path: '/api/hardware', handler: handleHardware },

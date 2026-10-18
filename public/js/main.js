@@ -1,5 +1,6 @@
 import { initBusyOverlay } from './ui/busy.js';
 import { initDocuments } from './ui/documents.js';
+import { initInfoTips } from './ui/info.js';
 import { warmUpGliner } from './ui/detector-settings.js';
 import { initNotifications, showNotificationState } from './ui/notifications.js';
 import { initPromptsPanel, loadPrompts } from './ui/prompts-panel.js';
@@ -16,6 +17,7 @@ initPromptsPanel();
 initWorkflow();
 initDocuments();
 initNotifications();
+initInfoTips();
 
 await loadSettings();
 showNotificationState();

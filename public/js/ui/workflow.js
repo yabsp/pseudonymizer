@@ -5,7 +5,9 @@ import { DETECTORS } from '../detection/index.js';
 import { callCli } from '../targets/cli.js';
 import { isAbort, whileBusy } from './busy.js';
 import { markDetectorReady } from './detector-settings.js';
+import { fingerprintOf } from '../import/fingerprint.js';
 import { acceptedExtensions, importDocument } from '../import/index.js';
+import { convertedCopy } from './documents.js';
 import { $, setStatus } from './dom.js';
 import { downloadFile, downloadJson } from './files.js';
 import { notify } from './notifications.js';
@@ -222,10 +224,10 @@ export function refresh() {
   updateSteps();
 }
 
-function putIntoStepOne({ text, document, source }, file) {
+function putIntoStepOne({ text, document, source }, file, fingerprint = null) {
   state.source = source;
   if (document) {
-    state.document = { file, markdown: text, ...document };
+    state.document = { file, fingerprint, markdown: text, ...document };
   } else {
     state.document = null;
     $('input').value = text;
@@ -237,8 +239,21 @@ function putIntoStepOne({ text, document, source }, file) {
 async function openDocument(file, { formulas = false } = {}) {
   const title = formulas ? 'Converting formulas' : 'Opening ' + file.name;
   try {
+    // The same file is not converted twice: not when it is open already, nor when the Documents list has it.
+    const fingerprint = await fingerprintOf(file);
+    const open = state.document;
+    if (open?.fingerprint === fingerprint && (open.formulasConverted || !formulas)) {
+      return setStatus('detectStatus', 'This document is already open.');
+    }
+    const copy = await convertedCopy(fingerprint, formulas);
+    if (copy) {
+      openConverted(copy.imported, file, copy.found, fingerprint);
+      return setStatus('detectStatus', copy.found
+        ? `Taken from the Documents list, with its ${copy.found.mapping.length} values to hide. Check them in step 2.`
+        : 'Taken from the Documents list. Find the sensitive values next.');
+    }
     const { accelerator } = readSettings();
-    putIntoStepOne(await whileBusy(title, (signal, progress) => importDocument(file, { signal, progress, formulas, accelerator })), file);
+    putIntoStepOne(await whileBusy(title, (signal, progress) => importDocument(file, { signal, progress, formulas, accelerator })), file, fingerprint);
     const done = formulas ? 'Formulas converted.' : 'Document opened.';
     setStatus('detectStatus', state.textAtLastDetection === null || !state.mapping.length
       ? `${done} Find the sensitive values next.`
@@ -255,9 +270,9 @@ async function openDocument(file, { formulas = false } = {}) {
  * (kept in this page for converting formulas later). found (from findSensitiveValues, with a fresh mapping)
  * replaces the values of the previous text and goes straight to step 2; without it, detection comes next.
  */
-export function openConverted(imported, file, found = null) {
+export function openConverted(imported, file, found = null, fingerprint = null) {
   showTab('work');
-  putIntoStepOne(imported, file);
+  putIntoStepOne(imported, file, fingerprint);
   if (found) return showFound(found);
   state.mapping = [];
   state.textAtLastDetection = null;

@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import { DOCUMENT_FORMATS, MAX_JOBS, MAX_PDF_BYTES, MAX_TEXT_BYTES, MAX_WAITING_BYTES } from './config.js';
 import { extractPdf, isPdf, PDF_NOT_AVAILABLE } from './documents.js';
 import { ACCELERATOR } from './gliner.js';
-import { BodyTooLargeError, readBytes, rejectUnlessFromApp, rejectUnlessFromAppOrigin, send } from './http.js';
+import { BodyTooLargeError, readBody, readBytes, rejectUnlessFromApp, rejectUnlessFromAppOrigin, send } from './http.js';
 
 // The steps of a pipeline: { label, run(input, { formulas, accelerator, signal }) -> output }. The first step gets the uploaded
 // bytes; the last one returns { text, document? } as the importers in public/js/import/ do, document holding the
@@ -33,7 +33,7 @@ const PIPELINES = {
   },
 };
 
-// Jobs in the order they were added; in memory only, so they are gone when the app closes.
+// Jobs in list order (as added, unless the user moved one; waiting jobs run in this order); in memory only, so they are gone when the app closes.
 // state: 'waiting' -> 'running' -> 'ready' or 'failed'. input (the uploaded bytes) is held only while waiting,
 // result ({ text, document? }) only once ready. A cancelled job is removed, so it has no state of its own here.
 const jobs = [];
@@ -118,6 +118,25 @@ export function getJob(req, res, id) {
   const job = jobs.find((j) => j.id === id);
   if (!job) return send(res, 404, { error: 'This document is no longer in the list.' });
   send(res, 200, { ...describe(job), result: job.result });
+}
+
+/** Moves the job to { position } in the list (1 is first), so a waiting job runs earlier or later. */
+export async function moveJob(req, res, id) {
+  if (rejectUnlessFromApp(req, res)) return;
+  let position;
+  try {
+    ({ position } = JSON.parse(await readBody(req)));
+  } catch {
+    return send(res, 400, { error: 'Invalid JSON.' });
+  }
+  const index = jobs.findIndex((j) => j.id === id);
+  if (index === -1) return send(res, 404, { error: 'This document is no longer in the list.' });
+  if (!Number.isInteger(position) || position < 1 || position > jobs.length) {
+    return send(res, 400, { error: `position must be a whole number from 1 to ${jobs.length}.` });
+  }
+  const [job] = jobs.splice(index, 1);
+  jobs.splice(position - 1, 0, job);
+  send(res, 200, jobs.map(describe));
 }
 
 /** Cancels the job if it is waiting or running (its process is stopped and its files deleted) and forgets it. */

@@ -17,6 +17,7 @@ need the app's `Origin` and the listed `Content-Type` (`rejectUnlessFromApp`). E
 | `POST /api/extract/pdf` | the PDF (`application/pdf`, max 50 MB); `?formulas=1`, `?accelerator=` | `{ markdown, pages, images, formulas, formulasConverted, tables, device, deviceNote? }` |
 | `POST /api/jobs?format=pdf\|text` | the file (`application/pdf`, or `application/octet-stream` for text); `&formulas=1`, `&accelerator=` | `201 { id, format, formulas, state, step, error }`; at most 50 documents and 500 MB waiting (429, 413) |
 | `GET /api/jobs` | | the list in that shape, never text; `state` `waiting`, `running`, `ready`, `failed`; `step` `{ number, of, label, seconds }` |
+| `POST /api/jobs/<id>/move` | `{ position }`, 1 is first | the list in its new order; waiting documents are converted in list order |
 | `GET /api/jobs/<id>`, `DELETE /api/jobs/<id>` | | GET adds `result: { text, document? }` once ready; DELETE cancels (process stopped, temp files deleted) and forgets |
 | `PUT /api/prompts/<file>` | `{ text }`; file one of `gliner-labels.txt`, `not-sensitive.txt`, `rules.md`, `detection.md`, `system.md` | `{ file }`; written as `prompts/<name>.<ext>` (user only), desktop: `prompts/` in the data folder |
 | `POST /api/hardware` | `{}` | `{ system, backends }` (see Hardware) |

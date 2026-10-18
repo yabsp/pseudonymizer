@@ -18,6 +18,11 @@ export async function addJob(file, { formulas = false, accelerator = 'auto' } = 
   return callServer('api/jobs' + query, { method: 'POST', body: file, contentType });
 }
 
+/** Moves a document to a position in the list (1 is first); waiting documents are converted in list order. */
+export function moveJob(id, position) {
+  return callServer(`api/jobs/${id}/move`, { method: 'POST', body: { position }, signal: AbortSignal.timeout(LIST_TIMEOUT_MS) });
+}
+
 /** The jobs in the order they were added: { id, format, formulas, state, step, error }, never their text. */
 export const listJobs = () => callServer('api/jobs', { signal: AbortSignal.timeout(LIST_TIMEOUT_MS) });
 

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { addJob, readJobResult } from '../../public/js/import/jobs.js';
+import { addJob, moveJob, readJobResult } from '../../public/js/import/jobs.js';
 
 const fileOf = (name, content, type = 'text/plain') => new File([content], name, { type });
 
@@ -20,6 +20,16 @@ describe('adding documents to the Documents list', () => {
     ]);
     assert.equal(requests[0].options.body, pdf);
     assert.ok(!requests.some((r) => r.url.includes('Muster') || r.url.includes('Keller')));
+  });
+
+  it('moves a document by sending only its new position', async (t) => {
+    const requests = [];
+    t.mock.method(globalThis, 'fetch', async (url, options) => {
+      requests.push({ url, options });
+      return Response.json([]);
+    });
+    await moveJob('abc-1', 2);
+    assert.deepEqual(requests.map((r) => [r.url, r.options.method, r.options.body]), [['api/jobs/abc-1/move', 'POST', '{"position":2}']]);
   });
 
   it('refuses unknown formats and files over the limit before uploading', async (t) => {
