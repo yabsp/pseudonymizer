@@ -37,7 +37,7 @@ You also need one AI tool, installed and logged in on your computer: Claude Code
 
 **Several documents at once:** in the Documents tab, add or drop several files. They are converted one after another
 on your computer and their sensitive values are found right away, so you can work on something else meanwhile.
-Change the order with the arrows; a file that is already in the list, or already open, is not converted again.
+Change the order by dragging a row or with the arrows; a file that is already in the list, or already open, is not converted again.
 Open puts a ready document into the steps above; sending stays a separate step. The list is gone when the app
 closes.
 

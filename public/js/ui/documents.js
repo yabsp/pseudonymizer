@@ -12,6 +12,8 @@ import { readSettings } from './settings-store.js';
 import { openConverted } from './workflow.js';
 
 const POLL_MS = 1000;
+// The drag data of a row being moved, so a row can't be mistaken for files dropped from outside.
+const ROW_TYPE = 'application/x-pseudonymizer-job';
 const CONFIRM_REMOVE_MS = 4000;
 
 // The documents in the list, by job id, in the order they were added (a Map keeps it). Each entry:
@@ -69,7 +71,9 @@ function renderRow(id, entry) {
     const remove = h('button', { type: 'button', className: 'ghost small danger', onclick: () => void removeEntry(id) });
     const up = h('button', { type: 'button', className: 'ghost small', 'aria-label': 'Move up', title: 'Move up', onclick: () => void moveEntry(id, -1) }, '↑');
     const down = h('button', { type: 'button', className: 'ghost small', 'aria-label': 'Move down', title: 'Move down', onclick: () => void moveEntry(id, 1) }, '↓');
-    const li = h('li', { className: 'job' }, number, h('div', { className: 'job-text' }, name, state), h('div', { className: 'job-actions' }, up, down, open, remove));
+    const handle = h('span', { className: 'drag-handle', 'aria-hidden': 'true', title: 'Drag to move' }, '⠿');
+    const li = h('li', { className: 'job', draggable: true }, handle, number, h('div', { className: 'job-text' }, name, state), h('div', { className: 'job-actions' }, up, down, open, remove));
+    makeDraggable(li, id);
     entry.row = { li, number, state, open, remove, up, down, confirmTimer: null };
   }
   const { li, number, state, open, remove, up, down, confirmTimer } = entry.row;
@@ -174,21 +178,55 @@ function putInOrder(ids) {
   for (const [id, entry] of [...ordered, ...rest]) entries.set(id, entry);
 }
 
-/** Moves a document one place up (-1) or down (1); a waiting one is then converted in its new place. */
+/** Moves a document one place up (-1) or down (1), keeping the keyboard focus on the button. */
 async function moveEntry(id, by) {
   const to = position(id) + by;
   if (!entries.has(id) || to < 1 || to > entries.size) return;
+  await moveTo(id, to, () => entries.get(id).row[by < 0 ? 'up' : 'down'].focus());
+}
+
+/** Moves a document to position to (1 is first); a waiting one is then converted in its new place. */
+async function moveTo(id, to, afterRender = () => {}) {
+  if (!entries.has(id) || to === position(id)) return;
   const ids = [...entries.keys()].filter((other) => other !== id);
   ids.splice(to - 1, 0, id);
   putInOrder(ids);
   render();
-  entries.get(id).row[by < 0 ? 'up' : 'down'].focus();
+  afterRender();
   try {
     await moveJob(id, to);
   } catch (e) {
     setStatus('documentsStatus', `The document could not be moved: ${e.message}`, true);
   }
   startPolling(); // shows the server's order, also after a failed move
+}
+
+/** Drag and drop within the list: the row shows a line where the dragged one will go. */
+function makeDraggable(li, id) {
+  const clearMarks = () => li.classList.remove('drop-before', 'drop-after');
+  const isLowerHalf = (e) => e.clientY > li.getBoundingClientRect().top + li.offsetHeight / 2;
+  li.addEventListener('dragstart', (e) => {
+    e.dataTransfer.setData(ROW_TYPE, id);
+    e.dataTransfer.effectAllowed = 'move';
+    li.classList.add('dragging');
+  });
+  li.addEventListener('dragend', () => li.classList.remove('dragging'));
+  li.addEventListener('dragover', (e) => {
+    if (![...e.dataTransfer.types].includes(ROW_TYPE)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    li.classList.toggle('drop-after', isLowerHalf(e));
+    li.classList.toggle('drop-before', !isLowerHalf(e));
+  });
+  li.addEventListener('dragleave', clearMarks);
+  li.addEventListener('drop', (e) => {
+    const dragged = e.dataTransfer.getData(ROW_TYPE);
+    clearMarks();
+    if (!dragged || dragged === id) return;
+    e.preventDefault();
+    const others = [...entries.keys()].filter((other) => other !== dragged);
+    void moveTo(dragged, others.indexOf(id) + (isLowerHalf(e) ? 2 : 1));
+  });
 }
 
 async function addFiles(files) {
