@@ -114,7 +114,10 @@ sets the server's environment, imports `server/index.js`, waits for `listening`,
 `http://127.0.0.1:47291` (or a free port). Lock-down: no Node in the window, sandbox, no navigation away, no new
 windows, no permissions, spell checker off (it downloaded dictionaries from Google), every request not to
 localhost or 127.0.0.1 cancelled. Build: `desktop/build-helper.mjs` (PyInstaller, `--onedir`, Presidio and spaCy
-excluded, about 855 MB), `desktop/build-models.mjs` (copies the Hugging Face cache with links resolved, 1.1 GB),
+excluded, Docling included, 0.94 GB; 3.3 GB from an environment with PyTorch's CUDA build via `HELPER_PYTHON`,
+`npm run dist:win:gpu`), `desktop/build-models.mjs` (copies GLiNER from the Hugging Face cache with links resolved,
+1.1 GB, and the Docling models, 1.2 GB). The NSIS installer can't embed more than 2 GiB, which the app now exceeds
+(ADR 0008, open),
 electron-builder (`package.json` `build`; only `prompts/*.default.*` are packed). Terminals inside VS Code set
 `ELECTRON_RUN_AS_NODE`, which makes Electron exit silently; `npm run desktop` removes it.
 
