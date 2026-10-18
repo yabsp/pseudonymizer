@@ -1,7 +1,7 @@
 // The desktop app: starts the unchanged local server inside Electron and shows the page in a locked-down window.
 // Everything stays on this machine: the server listens on 127.0.0.1 only, the models ship with the app and are
 // loaded offline, and the window can't open other sites.
-import { app, BrowserWindow, dialog, Menu, session } from 'electron';
+import { app, BrowserWindow, dialog, Menu, session, shell } from 'electron';
 import { execFileSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import net from 'node:net';
@@ -128,11 +128,30 @@ function openWindow(origin) {
   return window;
 }
 
+/**
+ * Windows shows notifications only for an app id that a Start menu entry carries. The app ships as a folder
+ * without an installer (ADR 0008), so it adds that entry itself, for this user only, and points it at the folder
+ * it now runs from (it may have been moved). Not being able to is not fatal: only notifications are missing.
+ */
+function addStartMenuEntry() {
+  const link = path.join(app.getPath('appData'), 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Pseudonymizer.lnk');
+  const entry = { target: process.execPath, appUserModelId: APP_ID, description: 'Pseudonymizer' };
+  let current = null;
+  try {
+    current = shell.readShortcutLink(link);
+  } catch {
+    // no entry yet; it is created below
+  }
+  if (current?.target === entry.target && current?.appUserModelId === APP_ID) return;
+  // 'replace' only overwrites an existing entry, 'create' only makes a new one.
+  if (!shell.writeShortcutLink(link, current ? 'replace' : 'create', entry)) console.error('The Start menu entry could not be written, so notifications may not show.');
+}
+
 async function start() {
   blockInternet();
-  // Windows shows notifications only for an app id with a Start menu entry: the installer registers APP_ID
-  // (build.appId); started from the project folder, only Electron's own path is known to Windows.
+  // Started from the project folder, only Electron's own path is known to Windows as an app id.
   if (process.platform === 'win32') app.setAppUserModelId(app.isPackaged ? APP_ID : process.execPath);
+  if (process.platform === 'win32' && app.isPackaged) addStartMenuEntry();
   useTerminalSearchPath();
   const port = await choosePort();
   configureServer(port);

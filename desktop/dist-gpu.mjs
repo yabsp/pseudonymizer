@@ -1,4 +1,4 @@
-// Builds the Windows installer of the GPU variant: the same app and models, with the helper built from a Python
+// Builds the Windows ZIP of the GPU variant: the same app and models, with the helper built from a Python
 // environment that has PyTorch's CUDA build (HELPER_PYTHON), so detection and PDFs can use an NVIDIA GPU.
 // Run on Windows: HELPER_PYTHON=<that environment's python.exe> npm run dist:win:gpu
 import { spawnSync } from 'node:child_process';
@@ -15,7 +15,7 @@ if (!check.stdout?.trim()) throw new Error(`The PyTorch at ${process.env.HELPER_
 for (const args of [
   ['desktop/build-helper.mjs'],
   ['desktop/build-models.mjs'],
-  ['node_modules/electron-builder/cli.js', '--win', 'nsis', '-c.win.artifactName=${productName}-Setup-${version}-GPU.${ext}'],
+  ['node_modules/electron-builder/cli.js', '--win', 'zip', '-c.win.artifactName=${productName}-${version}-win-${arch}-GPU.${ext}'],
 ]) {
   const result = spawnSync(process.execPath, args, { stdio: 'inherit', cwd: ROOT });
   if (result.status !== 0) process.exit(result.status ?? 1);

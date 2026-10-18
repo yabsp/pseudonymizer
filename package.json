@@ -18,7 +18,7 @@
     "build:helper": "node desktop/build-helper.mjs",
     "build:models": "node desktop/build-models.mjs",
     "dist:linux": "npm run build:helper && npm run build:models && electron-builder --linux AppImage",
-    "dist:win": "npm run build:helper && npm run build:models && electron-builder --win nsis",
+    "dist:win": "npm run build:helper && npm run build:models && electron-builder --win zip",
     "dist:win:gpu": "node desktop/dist-gpu.mjs"
   },
   "devDependencies": {
@@ -61,14 +61,9 @@
       "syncDesktopName": true
     },
     "win": {
-      "target": "nsis",
+      "target": "zip",
       "icon": "desktop/icons/icon.ico",
-      "artifactName": "${productName}-Setup-${version}.${ext}"
-    },
-    "nsis": {
-      "oneClick": false,
-      "perMachine": false,
-      "allowToChangeInstallationDirectory": true
+      "artifactName": "${productName}-${version}-win-${arch}.${ext}"
     }
   },
   "desktopName": "pseudonymizer.desktop"

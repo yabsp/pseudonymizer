@@ -1,6 +1,6 @@
 # 8. How the Windows desktop app is packaged now that it opens PDFs
 
-Status: proposed (2026-10-18), a decision of the user is open
+Status: accepted (2026-10-18): option 2
 
 ## Context
 The desktop app now ships Docling for PDFs, and a GPU variant was asked for. Measured on Windows (2026-10-18):
@@ -34,7 +34,12 @@ values (one formula's LaTeX spacing differs).
 4. **Installer with the models beside it.** The installer copies a models folder that lies next to it; the
    download is a ZIP of both. Little work, but two parts that must stay together.
 
-## Recommendation
+## Decision
+Option 2: `npm run dist:win` and `npm run dist:win:gpu` build `Pseudonymizer-<version>-win-x64.zip` and
+`...-GPU.zip`. On its first start the app adds a Start menu entry for this user with its app id (`desktop/main.js`,
+`addStartMenuEntry`), which Windows needs to show notifications, and points it at the folder it runs from.
+
+## Recommendation (when proposed)
 Option 2 now, as it ships PDFs and the GPU variant today with almost no new code (plus the Start menu entry for
 notifications), and option 1 when the app goes to more users, together with code signing. Option 3 becomes
 attractive once there is a code-signing certificate anyway.

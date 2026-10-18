@@ -14,11 +14,14 @@ AI model you chose, and puts the original values back into the answer. Made for 
 Pseudonymization is only as good as detection: always look at the highlighted preview before sending.
 
 ## Getting started
-**Desktop app** (Linux, Windows in preparation): download it, start it, done. It brings everything it needs.
+**Desktop app** (Linux, Windows): download it, start it, done. It brings everything it needs, also for PDFs.
 - Linux: make `Pseudonymizer-<version>-x86_64.AppImage` executable (right click > Properties > "Allow executing",
   or `chmod +x`) and start it.
-- Windows: run `Pseudonymizer-Setup-<version>.exe`. Without a code signature, Windows shows a warning ("More info"
-  > "Run anyway").
+- Windows: unpack `Pseudonymizer-<version>-win-x64.zip` into a folder of your choice (about 3.5 GB) and start
+  `Pseudonymizer.exe`. With an NVIDIA graphics card, take the `-GPU` version instead (about 6 GB, much faster for
+  PDFs with formulas). Without a code signature, Windows shows a warning ("More info" > "Run anyway"). On the
+  first start the app adds itself to the Start menu, which Windows needs for its notifications. To remove it,
+  delete the folder and the Start menu entry.
 
 **From the project folder**: see [docs/setup.md](docs/setup.md). Then `npm start` and open http://localhost:8091.
 

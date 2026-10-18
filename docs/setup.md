@@ -93,10 +93,13 @@ npm install                          # Electron and electron-builder, build tool
 .venv/bin/python -m pip install pyinstaller
 npm run desktop                      # try it from the project folder
 npm run dist:linux                   # dist/Pseudonymizer-<version>-x86_64.AppImage
-npm run dist:win                     # on Windows: dist/Pseudonymizer-Setup-<version>.exe
+npm run dist:win                     # on Windows: dist/Pseudonymizer-<version>-win-x64.zip
+npm run dist:win:gpu                 # the same with PyTorch's CUDA build, see below
 ```
-Build each system's version on that system. On Windows, the helper and the unpacked app (`electron-builder --win
-dir`) were built and tested; the installer step itself has not been run yet.
+Build each system's version on that system. The Docling models must be downloaded first (see "Opening PDF
+documents"); they ship with the app. Windows gets a ZIP instead of an installer: the app is larger than the 2 GB
+an NSIS installer can hold (docs/adr/0008-desktop-packaging.md). For the GPU variant, set `HELPER_PYTHON` to the
+`python.exe` of a separate environment with the CUDA build of PyTorch, the requirements and PyInstaller.
 
 ## Run the tests
 ```
