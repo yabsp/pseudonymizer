@@ -69,18 +69,13 @@ function renderRow(id, entry) {
     const state = h('p', { className: 'job-state' });
     const open = h('button', { type: 'button', className: 'small', onclick: () => void openEntry(id) }, 'Open');
     const remove = h('button', { type: 'button', className: 'ghost small danger', onclick: () => void removeEntry(id) });
-    const up = h('button', { type: 'button', className: 'ghost small', 'aria-label': 'Move up', title: 'Move up', onclick: () => void moveEntry(id, -1) }, '↑');
-    const down = h('button', { type: 'button', className: 'ghost small', 'aria-label': 'Move down', title: 'Move down', onclick: () => void moveEntry(id, 1) }, '↓');
-    const handle = h('span', { className: 'drag-handle', 'aria-hidden': 'true', title: 'Drag to move' }, '⠿');
-    const li = h('li', { className: 'job', draggable: true }, handle, number, h('div', { className: 'job-text' }, name, state), h('div', { className: 'job-actions' }, up, down, open, remove));
+    const li = h('li', { className: 'job', draggable: true, title: 'Drag to change the order' }, number, h('div', { className: 'job-text' }, name, state), h('div', { className: 'job-actions' }, open, remove));
     makeDraggable(li, id);
-    entry.row = { li, number, state, open, remove, up, down, confirmTimer: null };
+    entry.row = { li, number, state, open, remove, confirmTimer: null };
   }
-  const { li, number, state, open, remove, up, down, confirmTimer } = entry.row;
+  const { li, number, state, open, remove, confirmTimer } = entry.row;
   li.dataset.state = entry.job.state;
   number.textContent = position(id);
-  up.disabled = position(id) === 1;
-  down.disabled = position(id) === entries.size;
   state.textContent = describeState(entry);
   state.classList.toggle('error', entry.job.state === 'failed' || entry.detection?.error !== undefined);
   open.hidden = entry.job.state !== 'ready' || entry.detection === 'running' || (entry.detect && entry.detection === 'waiting');
@@ -178,21 +173,13 @@ function putInOrder(ids) {
   for (const [id, entry] of [...ordered, ...rest]) entries.set(id, entry);
 }
 
-/** Moves a document one place up (-1) or down (1), keeping the keyboard focus on the button. */
-async function moveEntry(id, by) {
-  const to = position(id) + by;
-  if (!entries.has(id) || to < 1 || to > entries.size) return;
-  await moveTo(id, to, () => entries.get(id).row[by < 0 ? 'up' : 'down'].focus());
-}
-
 /** Moves a document to position to (1 is first); a waiting one is then converted in its new place. */
-async function moveTo(id, to, afterRender = () => {}) {
+async function moveTo(id, to) {
   if (!entries.has(id) || to === position(id)) return;
   const ids = [...entries.keys()].filter((other) => other !== id);
   ids.splice(to - 1, 0, id);
   putInOrder(ids);
   render();
-  afterRender();
   try {
     await moveJob(id, to);
   } catch (e) {
@@ -201,16 +188,23 @@ async function moveTo(id, to, afterRender = () => {}) {
   startPolling(); // shows the server's order, also after a failed move
 }
 
-/** Drag and drop within the list: the row shows a line where the dragged one will go. */
+/** Drag and drop within the list: the whole row moves with the pointer, and a line shows where it will go. */
 function makeDraggable(li, id) {
   const clearMarks = () => li.classList.remove('drop-before', 'drop-after');
   const isLowerHalf = (e) => e.clientY > li.getBoundingClientRect().top + li.offsetHeight / 2;
+  let fadeTimer = null;
   li.addEventListener('dragstart', (e) => {
     e.dataTransfer.setData(ROW_TYPE, id);
     e.dataTransfer.effectAllowed = 'move';
-    li.classList.add('dragging');
+    const box = li.getBoundingClientRect();
+    e.dataTransfer.setDragImage(li, e.clientX - box.left, e.clientY - box.top);
+    // After the browser took the picture of the row, so the picture isn't faded too.
+    fadeTimer = setTimeout(() => li.classList.add('dragging'), 0);
   });
-  li.addEventListener('dragend', () => li.classList.remove('dragging'));
+  li.addEventListener('dragend', () => {
+    clearTimeout(fadeTimer);
+    li.classList.remove('dragging');
+  });
   li.addEventListener('dragover', (e) => {
     if (![...e.dataTransfer.types].includes(ROW_TYPE)) return;
     e.preventDefault();
