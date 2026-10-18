@@ -58,8 +58,8 @@ if (apiToken !== null && !/^[\da-f]{64}$/.test(apiToken)) throw new Error('PSEUD
 export const API_TOKEN = apiToken;
 export const API_TOKEN_HEADER = 'x-pseudonymizer-token';
 export const AVAILABLE_DETECTORS = appKind === 'desktop' ? ['gliner', 'ollama'] : ['gliner', 'presidio', 'ollama'];
-// The desktop app's helper doesn't contain Docling yet, so it can't open PDFs.
-export const DOCUMENT_FORMATS = appKind === 'desktop' ? [] : ['pdf'];
+// Both the project's Python and the desktop app's helper contain Docling.
+export const DOCUMENT_FORMATS = ['pdf'];
 
 export const CLI_TIMEOUT_MS = 10 * 60 * 1000;
 // Where commands are looked up on Windows, as cmd.exe would: the folders on PATH, each name with the extensions

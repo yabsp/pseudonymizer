@@ -27,8 +27,8 @@ need the app's `Origin` and the listed `Content-Type` (`rejectUnlessFromApp`). E
 can't use (e.g. DirectML), so the processor read the document. Jobs live in memory only, one runs at a time
 (`server/jobs.js`, ADR 0005). `runtime` is `{ id, label, verified?, notice? }`: where detection ran; `notice` explains a fallback to the CPU.
 `accelerator` values: `auto`, `torch-cpu`, `torch-cuda`, `torch-xpu`, `torch-mps`, `onnx-cpu`, `onnx-cuda`,
-`onnx-directml`, `onnx-coreml` (allowlist `ACCELERATOR` in `server/gliner.js`). A PDF route is answered with 501
-in the desktop app.
+`onnx-directml`, `onnx-coreml` (allowlist `ACCELERATOR` in `server/gliner.js`). The PDF routes answer 501 when
+`DOCUMENT_FORMATS` (`server/config.js`) lacks `pdf`; both the server and the desktop app have it.
 
 ## Environment variables
 Read and validated in `server/config.js` only (except `desktop/main.js`, which sets them).
@@ -39,7 +39,7 @@ Read and validated in `server/config.js` only (except `desktop/main.js`, which s
 | `GLINER_PYTHON` | Python for the helpers, default `.venv`'s |
 | `PSEUDONYMIZER_DATA_DIR` | absolute folder for `settings.json`, default the project folder |
 | `DETECTION_HELPER` | bundled helper program (PyInstaller) used instead of Python and the scripts; `--extract-document` for PDFs |
-| `PSEUDONYMIZER_APP` | `server` or `desktop`; the desktop app offers no Presidio and no PDFs yet |
+| `PSEUDONYMIZER_APP` | `server` or `desktop`; the desktop app offers no Presidio yet |
 | `PSEUDONYMIZER_API_TOKEN` | set by the desktop app: a new random secret (64 hex digits) per start; every `/api/` request needs it in `X-Pseudonymizer-Token`, which Electron adds to the window's requests (the page never sees it); removed from the environment before helpers and CLIs start |
 | `DOCLING_ARTIFACTS_PATH` | Docling models, default `~/.cache/docling/models` (read by `python/document_extraction.py`) |
 | `PSEUDONYMIZER_CACHE` | exported ONNX models, default `~/.cache/pseudonymizer` or `%LOCALAPPDATA%\pseudonymizer` |
@@ -103,7 +103,7 @@ with a login. API targets are parked in `parked/api-targets/`.
 | settings | `settings.json` in the project folder (mode 0600; on Windows its access list is set to the user with `icacls`), desktop: `~/.config/pseudonymizer/` or `%APPDATA%\pseudonymizer\`; a copy in localStorage |
 | theme | localStorage `pseudo-theme` |
 | GLiNER and tokenizer | `~/.cache/huggingface/hub` (desktop: bundled in `resources/models`, `HF_HUB_OFFLINE=1`) |
-| Docling models | `~/.cache/docling/models` |
+| Docling models | `~/.cache/docling/models` or `DOCLING_ARTIFACTS_PATH` (desktop: bundled in `resources/models/docling`) |
 | ONNX export | `~/.cache/pseudonymizer/onnx/<model>` |
 | PDFs during extraction | a private `pseudo-doc-*` temp folder, deleted afterwards |
 | CLI runs | a `pseudo-*` temp folder, deleted afterwards |

@@ -57,7 +57,7 @@ processor, under a second with an NVIDIA graphics card).
   model (about 10 seconds).
 - Swiss towns are hidden also without a postal code ("aus Hochdorf"); a court's seat ("Bezirksgericht Hochdorf")
   stays readable unless the town also appears elsewhere in the text.
-- The desktop app doesn't open PDFs and doesn't offer Presidio yet. Prompt changes are kept with "Save" in the
+- The desktop app doesn't offer Presidio yet. Prompt changes are kept with "Save" in the
   Prompts tab.
 - Planned: reusable value lists.
 

@@ -18,7 +18,8 @@
     "build:helper": "node desktop/build-helper.mjs",
     "build:models": "node desktop/build-models.mjs",
     "dist:linux": "npm run build:helper && npm run build:models && electron-builder --linux AppImage",
-    "dist:win": "npm run build:helper && npm run build:models && electron-builder --win nsis"
+    "dist:win": "npm run build:helper && npm run build:models && electron-builder --win nsis",
+    "dist:win:gpu": "node desktop/dist-gpu.mjs"
   },
   "devDependencies": {
     "electron": "44.8.0",

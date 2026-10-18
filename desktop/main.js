@@ -70,6 +70,7 @@ function configureServer(port) {
   const helperName = process.platform === 'win32' ? 'detection-helper.exe' : 'detection-helper';
   process.env.DETECTION_HELPER = path.join(process.resourcesPath, 'helper', 'detection-helper', helperName);
   process.env.HF_HOME = path.join(process.resourcesPath, 'models');
+  process.env.DOCLING_ARTIFACTS_PATH = path.join(process.resourcesPath, 'models', 'docling');
   // Never contact Hugging Face: the models are bundled, and checking for updates would reveal app use.
   process.env.HF_HUB_OFFLINE = '1';
   process.env.TRANSFORMERS_OFFLINE = '1';

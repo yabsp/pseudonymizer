@@ -10,6 +10,11 @@ const SOURCE = process.env.HF_HOME ? path.join(process.env.HF_HOME, 'hub') : pat
 const TARGET = path.join(ROOT, 'build', 'models', 'hub');
 // GLiNER and the tokenizer of the model it is built on; both are loaded when GLiNER starts.
 const MODELS = ['urchade/gliner_multi_pii-v1', 'microsoft/mdeberta-v3-base'];
+// Docling's models as python/document_extraction.py uses them (layout, tables, formulas, OCR), from the folder
+// docling-tools downloaded them to; the ONNX copy of the layout model is not used, so it is not shipped.
+const DOCLING_SOURCE = process.env.DOCLING_ARTIFACTS_PATH || path.join(os.homedir(), '.cache', 'docling', 'models');
+const DOCLING_TARGET = path.join(ROOT, 'build', 'models', 'docling');
+const DOCLING_MODELS = ['docling-project--docling-layout-heron', 'docling-project--docling-models', 'docling-project--CodeFormulaV2', 'RapidOcr'];
 
 const cacheFolder = (id) => 'models--' + id.replace('/', '--');
 
@@ -33,4 +38,12 @@ for (const id of MODELS) {
     if (fs.existsSync(path.join(from, part))) copyResolvingLinks(path.join(from, part), path.join(TARGET, cacheFolder(id), part));
   }
   console.log('copied', id);
+}
+
+fs.rmSync(DOCLING_TARGET, { recursive: true, force: true });
+for (const name of DOCLING_MODELS) {
+  const from = path.join(DOCLING_SOURCE, name);
+  if (!fs.existsSync(from)) throw new Error(`${name} is not in ${DOCLING_SOURCE}. Download the Docling models as docs/setup.md says, then build again.`);
+  copyResolvingLinks(from, path.join(DOCLING_TARGET, name));
+  console.log('copied', name);
 }
