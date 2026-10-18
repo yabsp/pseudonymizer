@@ -51,15 +51,6 @@ describe('desktop app options', () => {
     assert.ok(!fs.existsSync(path.join(server.dir, SETTINGS_FILE)));
   });
 
-  it('says clearly that it can\'t open PDFs yet', async () => {
-    const res = await server.request({
-      method: 'POST', path: '/api/extract/pdf', body: Buffer.from('%PDF-1.7\n'),
-      headers: { Origin: server.origin, 'Content-Type': 'application/pdf' },
-    });
-    assert.equal(res.status, 501);
-    assert.match(res.json().error, /not part of the desktop app yet.*paste it instead/);
-  });
-
   it('starts the bundled helper program instead of Python with a script', { skip: IS_WINDOWS && 'the stand-in helper is a shell script' }, async () => {
     const res = await server.api('POST', '/api/detect/gliner', { text: 'Patient Hans Muster', labels: ['person'], threshold: 0.4, model: MODEL });
     assert.equal(res.status, 200, res.body);

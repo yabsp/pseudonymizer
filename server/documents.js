@@ -9,7 +9,7 @@ import { stopProcessTree } from './processes.js';
 
 // Every PDF file starts with "%PDF-".
 const PDF_SIGNATURE = '%PDF-';
-export const PDF_NOT_AVAILABLE = 'Opening PDFs is not part of the desktop app yet. Copy the text out of the PDF and paste it instead.';
+export const PDF_NOT_AVAILABLE = 'Opening PDFs is not available in this app. Copy the text out of the PDF and paste it instead.';
 const RESULT_COUNTS = ['pages', 'images', 'formulas', 'tables'];
 
 export const isPdf = (bytes) => bytes.subarray(0, PDF_SIGNATURE.length).toString('latin1') === PDF_SIGNATURE;
