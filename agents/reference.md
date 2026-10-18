@@ -40,6 +40,7 @@ Read and validated in `server/config.js` only (except `desktop/main.js`, which s
 | `PSEUDONYMIZER_DATA_DIR` | absolute folder for `settings.json`, default the project folder |
 | `DETECTION_HELPER` | bundled helper program (PyInstaller) used instead of Python and the scripts; `--extract-document` for PDFs |
 | `PSEUDONYMIZER_APP` | `server` or `desktop`; the desktop app offers no Presidio and no PDFs yet |
+| `PSEUDONYMIZER_API_TOKEN` | set by the desktop app: a new random secret (64 hex digits) per start; every `/api/` request needs it in `X-Pseudonymizer-Token`, which Electron adds to the window's requests (the page never sees it); removed from the environment before helpers and CLIs start |
 | `DOCLING_ARTIFACTS_PATH` | Docling models, default `~/.cache/docling/models` (read by `python/document_extraction.py`) |
 | `PSEUDONYMIZER_CACHE` | exported ONNX models, default `~/.cache/pseudonymizer` or `%LOCALAPPDATA%\pseudonymizer` |
 | `GEMINI_API_KEY` | passed through to Gemini CLI; never stored by the app |

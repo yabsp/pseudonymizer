@@ -41,7 +41,7 @@ Change the order by dragging a row; a file that is already in the list, or alrea
 Open puts a ready document into the steps above; sending stays a separate step. The list is gone when the app
 closes.
 
-Settings has the detection model (GLiNER is the default; GLiNER + Presidio finds more), the sensitivity, the
+Settings has the detection model (GLiNER + Presidio is the default and finds the most; GLiNER alone is faster), the sensitivity, the
 hardware (a GPU is used automatically if your computer has a usable one) and the AI tool. Settings are saved
 automatically. Notifications (off by default) tell you when a document is ready or detection is done while the
 window is in the background; they never contain file names, text or values. The button at the top right switches between light, dark and your system's setting.

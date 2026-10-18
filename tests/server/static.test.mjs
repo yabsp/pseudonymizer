@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { after, before, describe, it } from 'node:test';
-import { knownGap } from '../helpers/known-gaps.mjs';
 import { ROOT, SETTINGS_FILE, startServer } from '../helpers/server.mjs';
 
 describe('static files', () => {
@@ -109,7 +108,7 @@ describe('static files', () => {
 });
 
 describe('malformed requests', () => {
-  it('KNOWN BUG: a malformed URL does not crash the server', knownGap('decodeURIComponent throws on "%E0%A4%A" and the uncaught error stops the server; any web page can trigger it with an <img> tag'), async () => {
+  it('a malformed URL does not crash the server', async () => {
     const server = await startServer();
     try {
       const res = await server.request({ path: '/%E0%A4%A' }).catch((e) => ({ status: 0, error: e }));

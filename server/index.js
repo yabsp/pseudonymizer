@@ -4,7 +4,7 @@ import { handleCli, listAdapters } from './cli.js';
 import { PORT } from './config.js';
 import { handleExtractPdf } from './documents.js';
 import { handleGliner, handleHardware, handlePresidio } from './gliner.js';
-import { isAllowedHost, send } from './http.js';
+import { hasApiToken, isAllowedHost, send } from './http.js';
 import { addJob, getJob, listJobs, moveJob, removeJob } from './jobs.js';
 import { savePrompt } from './prompts.js';
 import { getSettings, saveSettings } from './settings.js';
@@ -42,13 +42,23 @@ function findRoute(method, pathname) {
   return null;
 }
 
-const server = http.createServer((req, res) => {
+async function handleRequest(req, res) {
   const { pathname } = new URL(req.url, 'http://x');
   if (pathname.startsWith('/api/') && !isAllowedHost(req)) return send(res, 403, { error: 'Host not allowed.' });
+  if (pathname.startsWith('/api/') && !hasApiToken(req)) return send(res, 403, { error: 'Not from this app.' });
   const found = findRoute(req.method, pathname);
   if (found) return found.route.handler(req, res, ...found.params);
   if (req.method === 'GET') return serveStatic(req, res);
   send(res, 405, { error: 'Method not allowed.' });
+}
+
+// One failing request must not stop the server: its error is answered (without details, they could contain
+// content) and not logged.
+const server = http.createServer((req, res) => {
+  handleRequest(req, res).catch(() => {
+    if (!res.headersSent) send(res, 500, { error: 'The request failed.' });
+    else res.destroy();
+  });
 });
 
 /** Resolves once the server accepts requests; the desktop app waits for it before opening its window. */

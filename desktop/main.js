@@ -3,6 +3,7 @@
 // loaded offline, and the window can't open other sites.
 import { app, BrowserWindow, dialog, Menu, session } from 'electron';
 import { execFileSync } from 'node:child_process';
+import crypto from 'node:crypto';
 import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -64,6 +65,7 @@ function configureServer(port) {
   process.env.PORT = String(port);
   process.env.PSEUDONYMIZER_DATA_DIR = app.getPath('userData');
   process.env.PSEUDONYMIZER_APP = 'desktop';
+  process.env.PSEUDONYMIZER_API_TOKEN = apiToken;
   if (!app.isPackaged) return;
   const helperName = process.platform === 'win32' ? 'detection-helper.exe' : 'detection-helper';
   process.env.DETECTION_HELPER = path.join(process.resourcesPath, 'helper', 'detection-helper', helperName);
@@ -88,6 +90,15 @@ function blockInternet() {
   const isAllowed = (permission, url) => permission === 'notifications' && LOCAL_URL.test(url || '');
   session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback, details) => callback(isAllowed(permission, details.requestingUrl)));
   session.defaultSession.setPermissionCheckHandler((_webContents, permission, requestingOrigin) => isAllowed(permission, requestingOrigin + '/'));
+}
+
+// A new secret on every start; only this app's window sends it, added here so the page itself never sees it.
+const apiToken = crypto.randomBytes(32).toString('hex');
+
+function sendApiToken(origin) {
+  session.defaultSession.webRequest.onBeforeSendHeaders({ urls: [`${origin}/api/*`] }, (details, callback) => {
+    callback({ requestHeaders: { ...details.requestHeaders, 'X-Pseudonymizer-Token': apiToken } });
+  });
 }
 
 function lockWindows(origin) {
@@ -125,9 +136,12 @@ async function start() {
   const port = await choosePort();
   configureServer(port);
   const { listening } = await import('../server/index.js');
+  // server/config.js has read it; the helpers and AI tools the server starts don't inherit it.
+  delete process.env.PSEUDONYMIZER_API_TOKEN;
   await listening;
   const origin = `http://127.0.0.1:${port}`;
   lockWindows(origin);
+  sendApiToken(origin);
   Menu.setApplicationMenu(null);
   let window = openWindow(origin);
   app.on('second-instance', () => {

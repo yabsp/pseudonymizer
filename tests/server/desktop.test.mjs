@@ -78,11 +78,29 @@ describe('the server as started with "npm start"', () => {
   });
 });
 
+describe('the API secret of the desktop app', () => {
+  const token = 'ab'.repeat(32);
+  let server;
+  before(async () => {
+    server = await startServer({ env: { PSEUDONYMIZER_API_TOKEN: token } });
+  });
+  after(async () => server?.close());
+
+  it('answers the API only with the secret, and still serves the page', async () => {
+    assert.equal((await server.request({ path: '/api/about' })).status, 403);
+    assert.equal((await server.request({ path: '/api/about', headers: { 'X-Pseudonymizer-Token': 'cd'.repeat(32) } })).status, 403);
+    assert.equal((await server.request({ path: '/api/about', headers: { 'X-Pseudonymizer-Token': token.slice(1) } })).status, 403);
+    assert.equal((await server.request({ path: '/api/about', headers: { 'X-Pseudonymizer-Token': token } })).status, 200);
+    assert.equal((await server.request({ path: '/' })).status, 200);
+  });
+});
+
 describe('invalid desktop options', () => {
   for (const [name, env, message] of [
     ['a relative data folder', { PSEUDONYMIZER_DATA_DIR: 'data' }, /PSEUDONYMIZER_DATA_DIR must be an absolute path/],
     ['a helper that does not exist', { DETECTION_HELPER: '/nonexistent/detection-helper' }, /DETECTION_HELPER points to .* which does not exist/],
     ['an unknown app kind', { PSEUDONYMIZER_APP: 'cloud' }, /PSEUDONYMIZER_APP must be "server" or "desktop"/],
+    ['an API secret that is too short', { PSEUDONYMIZER_API_TOKEN: 'abc' }, /PSEUDONYMIZER_API_TOKEN must be 64 hex digits/],
   ]) {
     it(`stop the server from starting: ${name}`, async () => {
       await assert.rejects(startServer({ env }), message);

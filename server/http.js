@@ -1,4 +1,5 @@
-import { ALLOWED_HOSTS, ALLOWED_ORIGINS } from './config.js';
+import crypto from 'node:crypto';
+import { ALLOWED_HOSTS, ALLOWED_ORIGINS, API_TOKEN, API_TOKEN_HEADER } from './config.js';
 
 // Types whose content is text, so the character set is named; images such as PNG are bytes.
 const TEXT_TYPE = /^text\/|json$|\+xml$/;
@@ -31,6 +32,14 @@ export async function readBytes(req, maxBytes) {
 
 // The Host header check stops DNS rebinding: another site's domain pointed at 127.0.0.1.
 export const isAllowedHost = (req) => ALLOWED_HOSTS.includes(req.headers.host);
+
+/** True without a token (npm start), else only for the token the desktop app's window sends. */
+export function hasApiToken(req) {
+  if (API_TOKEN === null) return true;
+  const sent = Buffer.from(String(req.headers[API_TOKEN_HEADER] ?? ''));
+  const expected = Buffer.from(API_TOKEN);
+  return sent.length === expected.length && crypto.timingSafeEqual(sent, expected);
+}
 
 /**
  * For requests without a body that change something (DELETE). Browsers send Origin with them, and other sites

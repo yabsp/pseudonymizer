@@ -50,6 +50,13 @@ export const MAX_WAITING_BYTES = 500 * 1024 * 1024;
 const appKind = process.env.PSEUDONYMIZER_APP || 'server';
 if (!['server', 'desktop'].includes(appKind)) throw new Error(`PSEUDONYMIZER_APP must be "server" or "desktop", not "${appKind}".`);
 export const APP_KIND = appKind;
+
+// Set by the desktop app: a random secret its window sends with every /api/ request (header API_TOKEN_HEADER),
+// so other programs on this computer can't use the API. 64 hex digits; unset for "npm start".
+const apiToken = process.env.PSEUDONYMIZER_API_TOKEN || null;
+if (apiToken !== null && !/^[\da-f]{64}$/.test(apiToken)) throw new Error('PSEUDONYMIZER_API_TOKEN must be 64 hex digits.');
+export const API_TOKEN = apiToken;
+export const API_TOKEN_HEADER = 'x-pseudonymizer-token';
 export const AVAILABLE_DETECTORS = appKind === 'desktop' ? ['gliner', 'ollama'] : ['gliner', 'presidio', 'ollama'];
 // The desktop app's helper doesn't contain Docling yet, so it can't open PDFs.
 export const DOCUMENT_FORMATS = appKind === 'desktop' ? [] : ['pdf'];

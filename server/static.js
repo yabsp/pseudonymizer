@@ -11,6 +11,7 @@ const TYPES = {
 const isInside = (dir, file) => file.startsWith(dir + path.sep);
 const isHidden = (dir, file) => path.relative(dir, file).split(path.sep).some((part) => part.startsWith('.'));
 
+/** The folder and file a path asks for; throws URIError for a malformed escape such as "%E0%A4%A". */
 function resolveFile(pathname) {
   const [dir, rest] = pathname.startsWith('/prompts/') ? [PROMPTS_DIR, pathname.slice('/prompts'.length)] : [PUBLIC_DIR, pathname];
   const urlPath = decodeURIComponent(rest);
@@ -25,7 +26,13 @@ function userPromptFile(dir, file) {
 }
 
 export function serveStatic(req, res) {
-  const { dir, file } = resolveFile(new URL(req.url, 'http://x').pathname);
+  let dir, file;
+  try {
+    ({ dir, file } = resolveFile(new URL(req.url, 'http://x').pathname));
+  } catch (e) {
+    if (e instanceof URIError) return send(res, 400, 'Malformed URL', 'text/plain');
+    throw e;
+  }
   if (!isInside(dir, file)) return send(res, 403, 'Forbidden', 'text/plain');
   if (isHidden(dir, file)) return send(res, 404, 'Not found', 'text/plain');
   const served = userPromptFile(dir, file) ?? file;

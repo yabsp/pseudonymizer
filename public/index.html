@@ -194,8 +194,8 @@
       <p class="hint">Finds the sensitive values, on this computer. <span class="info"><button type="button" class="info-btn" aria-label="More information" aria-describedby="info8">i</button><span class="info-tip" role="tooltip" id="info8">Finds the sensitive values. Runs on this machine; your original text never leaves it.</span></span></p>
       <label class="field">Detector
         <select id="detector">
-          <option value="gliner">GLiNER (fast, recommended)</option>
-          <option value="presidio">GLiNER + Presidio (finds more, more values to review)</option>
+          <option value="presidio" selected>GLiNER + Presidio (recommended, finds more)</option>
+          <option value="gliner">GLiNER (faster, misses more)</option>
           <option value="ollama">Ollama LLM (slower, follows the rules in the Prompts tab)</option>
         </select>
       </label>
