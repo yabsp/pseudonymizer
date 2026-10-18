@@ -15,7 +15,7 @@ if (!check.stdout?.trim()) throw new Error(`The PyTorch at ${process.env.HELPER_
 for (const args of [
   ['desktop/build-helper.mjs'],
   ['desktop/build-models.mjs'],
-  ['node_modules/electron-builder/cli.js', '--win', 'zip', '-c.win.artifactName=${productName}-${version}-win-${arch}-GPU.${ext}'],
+  ['node_modules/electron-builder/cli.js', '--win', 'zip', '-c.win.artifactName=${productName}-${version}-win-${arch}-GPU.${ext}', '--publish', 'never'],
 ]) {
   const result = spawnSync(process.execPath, args, { stdio: 'inherit', cwd: ROOT });
   if (result.status !== 0) process.exit(result.status ?? 1);

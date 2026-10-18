@@ -1,0 +1,21 @@
+# Downloads the models the desktop app ships (GLiNER with its tokenizer, and Docling's layout, table, formula and
+# OCR models) into the default caches, which desktop/build-models.mjs copies from; cached between runs.
+# Needs VENV_PYTHON: a Python environment with python/requirements.txt installed.
+name: Models
+description: GLiNER and Docling models for the desktop build, from the cache or Hugging Face
+runs:
+  using: composite
+  steps:
+    - uses: actions/cache@v4
+      id: cache
+      with:
+        path: |
+          ~/.cache/huggingface/hub
+          ~/.cache/docling/models
+        key: models-${{ runner.os }}-${{ env.MODELS_KEY }}
+    - name: Download the models
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        "$VENV_PYTHON" -c "from gliner import GLiNER; GLiNER.from_pretrained('urchade/gliner_multi_pii-v1')"
+        "$(dirname "$VENV_PYTHON")/docling-tools" models download layout tableformer code_formula rapidocr --rapidocr-backend-lang torch:de
