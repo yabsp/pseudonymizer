@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, it } from 'node:test';
 import { assertOnlyUserCanAccess } from '../helpers/file-access.mjs';
@@ -74,5 +76,24 @@ describe('settings API', () => {
     assertOnlyUserCanAccess(file);
     assert.deepEqual(JSON.parse(fs.readFileSync(file, 'utf8')), SETTINGS);
     assert.deepEqual(fs.readdirSync(server.dir).filter((name) => name.endsWith('.tmp')), [], 'no temporary file left');
+  });
+});
+
+describe('settings in a folder that passes no access rights on (Windows)', { skip: process.platform !== 'win32' && 'Windows access lists only' }, () => {
+  it('still leaves only the user with access (regression: SYSTEM and administrators kept access on a CI runner)', async () => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pseudo-noinherit-'));
+    // Only the user, without (OI)(CI): new files get no inherited entries, so Windows gives them explicit ones.
+    const sid = execFileSync(path.join(process.env.SystemRoot, 'System32', 'whoami.exe'), ['/user', '/fo', 'csv', '/nh'], { encoding: 'utf8' })
+      .trim().split(',').pop().replaceAll('"', '');
+    execFileSync(path.join(process.env.SystemRoot, 'System32', 'icacls.exe'), [dataDir, '/inheritance:r', '/grant:r', `*${sid}:F`]);
+    const server = await startServer({ env: { PSEUDONYMIZER_DATA_DIR: dataDir } });
+    try {
+      const res = await server.api('PUT', '/api/settings', SETTINGS);
+      assert.equal(res.status, 200, res.body);
+      assertOnlyUserCanAccess(path.join(dataDir, 'settings.json'));
+    } finally {
+      await server.close();
+      fs.rmSync(dataDir, { recursive: true, force: true });
+    }
   });
 });
