@@ -4,6 +4,9 @@ import re
 import sys
 import warnings
 
+# First: it turns off ONNX Runtime's telemetry, which gliner would otherwise load with it on.
+import accelerators
+
 try:
     from gliner import GLiNER
     IMPORT_ERROR = None
@@ -22,8 +25,6 @@ UNDERSCORE_IN_WORD = re.compile(r'(?<=[^\W_])_(?=[^\W_])')
 # The overlap is longer than the longest value GLiNER returns (12 words), so no value is cut in two.
 WINDOW_WORDS = 150
 OVERLAP_WORDS = 40
-
-import accelerators
 
 # The one model kept in memory: key (model name, requested hardware), and runtime, which says where it runs.
 loaded = {'key': None, 'model': None, 'runtime': None}

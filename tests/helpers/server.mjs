@@ -63,12 +63,23 @@ export async function startServer({ adapters = {}, env = {}, files = {} } = {}) 
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   let output = '';
-  await new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('server did not start: ' + output)), 10000);
-    child.stdout.on('data', (d) => { output += d; if (/running at/.test(output)) { clearTimeout(timer); resolve(); } });
-    child.stderr.on('data', (d) => (output += d));
-    child.on('exit', (code) => { clearTimeout(timer); reject(new Error(`server exited with ${code}: ${output}`)); });
-  });
+  try {
+    await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('server did not start: ' + output)), 10000);
+      child.stdout.on('data', (d) => { output += d; if (/running at/.test(output)) { clearTimeout(timer); resolve(); } });
+      child.stderr.on('data', (d) => (output += d));
+      child.on('exit', (code) => { clearTimeout(timer); reject(new Error(`server exited with ${code}: ${output}`)); });
+    });
+  } catch (e) {
+    // Tests that expect the server to refuse to start get no close(), so the copy is removed here.
+    if (child.exitCode === null && child.signalCode === null) {
+      const exited = new Promise((resolve) => child.once('exit', resolve));
+      child.kill();
+      await exited;
+    }
+    await removeFolder(dir);
+    throw e;
+  }
 
   const origin = `http://localhost:${port}`;
   return {

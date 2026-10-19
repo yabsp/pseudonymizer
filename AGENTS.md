@@ -73,7 +73,7 @@ Listen on `127.0.0.1` only; check `Host` on every `/api/` request and `Origin` p
 
 Any dependency or download needs the user's approval (name, source, size); check that the licence allows commercial use and that it runs locally, and state alternatives considered. The desktop app stays offline: bundled models with `HF_HUB_OFFLINE=1`, `desktop/main.js` blocks non-local requests; check new Electron features for background downloads. Prefer platform APIs.
 
-Hardware acceleration goes through `python/accelerators.py` only. A back end other than PyTorch on the CPU is used only after it found the same values as the CPU on the test text (`verify`); otherwise the CPU is used and the user is told (`runtime.notice`). ONNX Runtime always gets an explicit list of local providers, never the defaults (they include `AzureExecutionProvider`). New back ends need the same check and an entry in the allowlist `ACCELERATOR` in `server/gliner.js`.
+Hardware acceleration goes through `python/accelerators.py` only. A back end other than PyTorch on the CPU is used only after it found the same values as the CPU on the test text (`verify`); otherwise the CPU is used and the user is told (`runtime.notice`). ONNX Runtime always gets an explicit list of local providers, never the defaults (they include `AzureExecutionProvider`), and runs with `ORT_DISABLE_TELEMETRY=1`, set in `python/accelerators.py` before anything imports it (it reports to Microsoft on import otherwise). Check every new Python package for network calls with strace (`agents/testing.md`). New back ends need the same check and an entry in the allowlist `ACCELERATOR` in `server/gliner.js`.
 
 ## Style
 

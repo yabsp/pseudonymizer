@@ -12,6 +12,11 @@ import shutil
 import subprocess
 import sys
 
+# ONNX Runtime (1.31.0, Linux too) sends usage telemetry to Microsoft (mobile.events.data.microsoft.com) as soon as it
+# is imported, unless this is set first; its disable_telemetry_events() comes too late. gliner_helper.py and
+# document_extraction.py import this module before gliner and docling, which load ONNX Runtime; forced, not a default.
+os.environ['ORT_DISABLE_TELEMETRY'] = '1'
+
 # Tried in this order by "auto": GPUs first, then the CPU. ONNX Runtime on the CPU is not picked automatically:
 # measured on an Intel Core Ultra 7 it was no faster than PyTorch, and it needs the model exported first.
 AUTO_ORDER = ['torch-cuda', 'onnx-cuda', 'torch-xpu', 'onnx-directml', 'torch-mps', 'onnx-coreml', 'torch-cpu']
@@ -147,8 +152,13 @@ def backend_status():
         if backend in TORCH_DEVICES:
             reason = torch_reasons.get(backend)
             if reason is None and torch is not None:
-                entry['available'] = True
-                entry['device'] = _torch_device_name(torch, backend)
+                # is_available() only counts devices: PyTorch's XPU build reports one even when its GPU runtime
+                # can't open it (e.g. driver libraries missing), and only opening the device shows that.
+                try:
+                    entry['device'] = _torch_device_name(torch, backend)
+                    entry['available'] = True
+                except RuntimeError as e:
+                    reason = f'PyTorch finds this GPU but can\'t use it ({e}). Check the GPU drivers.'
         elif providers is None:
             reason = 'ONNX Runtime is not installed.'
         elif ONNX_PROVIDERS[backend] not in providers:

@@ -75,6 +75,8 @@ function configureServer(port) {
   process.env.HF_HUB_OFFLINE = '1';
   process.env.TRANSFORMERS_OFFLINE = '1';
   process.env.HF_HUB_DISABLE_TELEMETRY = '1';
+  // ONNX Runtime reports to Microsoft on import otherwise; python/accelerators.py forces it too.
+  process.env.ORT_DISABLE_TELEMETRY = '1';
 }
 
 // Not a valid host, so a dictionary download fails right away instead of reaching Google.

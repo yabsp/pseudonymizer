@@ -6,10 +6,10 @@ import { PYTHON } from '../helpers/python.mjs';
 import { FIXTURES, ROOT } from '../helpers/server.mjs';
 
 // Runs Python with python/ importable and the GLiNER stand-in, which finds the strings in FAKE_GLINER_ENTITIES.
-function runPython(code, entities = {}) {
+function runPython(code, entities = {}, env = {}) {
   const result = spawnSync(PYTHON, ['-c', code], {
     cwd: path.join(ROOT, 'python'), encoding: 'utf8',
-    env: { ...process.env, PYTHONPATH: path.join(FIXTURES, 'fake_gliner'), FAKE_GLINER_ENTITIES: JSON.stringify(entities) },
+    env: { ...process.env, PYTHONPATH: path.join(FIXTURES, 'fake_gliner'), FAKE_GLINER_ENTITIES: JSON.stringify(entities), ...env },
   });
   assert.equal(result.status, 0, result.stderr);
   return JSON.parse(result.stdout.trim().split('\n').pop());
@@ -19,6 +19,25 @@ function runPython(code, entities = {}) {
 const CANARY = { 'Maria Keller': ['person', 0.99], 'Rebgasse 21': ['address', 0.9], 'Matteo Ghirlanda': ['person', 0.95] };
 
 describe('hardware check', () => {
+  it('turns off ONNX Runtime\'s telemetry before anything that loads it is imported, whatever the environment says', () => {
+    // Records the setting at the moment each package is first imported; the stand-ins don't load ONNX Runtime
+    // themselves, but the real gliner and docling do.
+    const seen = runPython(`
+import json, os, sys
+seen = {}
+class Watch:
+    def find_spec(self, name, path=None, target=None):
+        top = name.split('.')[0]
+        if top in ('gliner', 'docling', 'onnxruntime'):
+            seen.setdefault(top, os.environ.get('ORT_DISABLE_TELEMETRY'))
+        return None
+sys.meta_path.insert(0, Watch())
+import gliner_helper, document_extraction
+print(json.dumps(seen))`, {}, { ORT_DISABLE_TELEMETRY: '0' });
+    assert.equal(seen.gliner, '1');
+    for (const [name, value] of Object.entries(seen)) assert.equal(value, '1', name);
+  });
+
   it('describes this machine and lists every back end with whether it can be used', () => {
     const { system, backends } = runPython('import json, accelerators; print(json.dumps(accelerators.probe()))');
     for (const key of ['os', 'architecture', 'cpu', 'threads', 'gpus']) assert.ok(key in system, key);
@@ -44,6 +63,26 @@ print(json.dumps(results))`);
     assert.match(answer.unknown, /unknown hardware "onnx-azure"/);
     assert.match(answer.missing, /is not available on this machine/);
     assert.ok(answer.auto);
+  });
+
+  it('marks a GPU that PyTorch counts but can\'t open as unavailable, so "auto" moves on', (t) => {
+    const answer = runPython(`
+import json, accelerators
+try:
+    import torch
+except ImportError:
+    print(json.dumps({'skipped': True}))
+    raise SystemExit
+def cannot_open(index):
+    raise RuntimeError('No CUDA GPUs are available')
+torch.cuda.is_available = lambda: True
+torch.cuda.get_device_name = cannot_open
+status = {b['id']: b for b in accelerators.backend_status()}
+print(json.dumps({'cuda': status['torch-cuda'], 'auto': accelerators.resolve('auto')}))`);
+    if (answer.skipped) return t.skip('PyTorch is not installed');
+    assert.equal(answer.cuda.available, false);
+    assert.match(answer.cuda.reason, /can't use it \(No CUDA GPUs are available\)/);
+    assert.notEqual(answer.auto, 'torch-cuda');
   });
 });
 

@@ -49,6 +49,15 @@ Start a separate server (`PORT=8092 npm start`; the user's own server may run on
 first and restore it afterwards, use synthetic text only. The browser tools work against `http://localhost:8092`;
 PDFs can be served temporarily by copying a synthetic file into `public/` and deleting it afterwards.
 
+## Checking for network calls
+Python packages can phone home (ONNX Runtime did, on import). Run the helper with synthetic requests under strace,
+keeping it alive a while so delayed uploads show, and look for internet or DNS connections:
+```
+(cat requests.jsonl; sleep 30) | strace -f -qq -e trace=connect -o net.trace .venv/bin/python python/gliner_helper.py
+grep -E 'AF_INET6?, sin6?_port=htons\((443|80|53)\)' net.trace   # should print nothing
+```
+`-k` adds the call stack, which names the library. `unshare -n` (no network) is blocked by AppArmor on this laptop.
+
 ## Pitfalls in this environment
 - VS Code activates `.venv`, so `python3` is `.venv/bin/python3` with all packages. Tests that need a missing
   package must use a stand-in (`tests/fixtures/no_gliner/`), never rely on the shell's Python.
