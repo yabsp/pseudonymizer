@@ -5,8 +5,9 @@ prompts/*.txt
 !prompts/*.default.*
 !prompts/README.md
 
-# Local Python environment
+# Local Python environments (.venv-xpu and similar for trying other PyTorch builds)
 .venv/
+.venv-*/
 __pycache__/
 
 # other

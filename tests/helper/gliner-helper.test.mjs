@@ -8,7 +8,8 @@ import { FIXTURES, GLINER_HELPER as HELPER } from '../helpers/server.mjs';
 import { CSV_EXPORT, CSV_PEOPLE } from '../fixtures/documents.mjs';
 
 const MODEL = 'urchade/gliner_multi_pii-v1';
-// Where the helper reports detection ran when no accelerator is available (always the case with the stand-in).
+// Where the helper reports detection ran when asked for the CPU. Tests that check it ask for torch-cpu: with "auto",
+// the real PyTorch in .venv may find a GPU (the XPU or CUDA build), which the stand-in can't load.
 const CPU = { id: 'torch-cpu', label: 'CPU (PyTorch)' };
 
 function startHelper(entities, env = {}) {
@@ -46,7 +47,7 @@ describe('GLiNER helper', () => {
   after(() => helper.close());
 
   it('loads the model on an empty text and answers with no values', async () => {
-    assert.deepEqual(await helper.send({ id: 1, text: '', labels: ['person'], model: MODEL }), { id: 1, entities: [], runtime: CPU });
+    assert.deepEqual(await helper.send({ id: 1, text: '', labels: ['person'], model: MODEL, accelerator: 'torch-cpu' }), { id: 1, entities: [], runtime: CPU });
   });
 
   it('finds every name in a long document exactly once, including at window edges', async () => {
@@ -202,7 +203,7 @@ describe('Presidio in the helper', () => {
   it('only loads GLiNER for an empty text', async () => {
     const helper = withPresidio({}, { FAKE_SPACY_MISSING: 'de_core_news_lg,fr_core_news_lg,it_core_news_lg,en_core_web_lg' });
     try {
-      assert.deepEqual(await presidio(helper, { id: 1, text: '' }), { id: 1, entities: [], runtime: CPU });
+      assert.deepEqual(await presidio(helper, { id: 1, text: '', accelerator: 'torch-cpu' }), { id: 1, entities: [], runtime: CPU });
     } finally {
       await helper.close();
     }

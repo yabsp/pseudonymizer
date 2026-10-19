@@ -140,5 +140,8 @@ telemetry module).
 - GLiNER: model load 5 to 7 s (AppImage 14 s, because it decompresses); a 5,000-character letter 5 to 8 s; a
   100-row CSV 9 to 21 s. Batching windows was slower; naive int8 quantization broke the model; 4 threads were
   about 25% faster than 16 (hybrid cores); ONNX Runtime on the CPU was no faster than PyTorch.
+- GLiNER on the Arc iGPU (`torch-xpu`, PyTorch 2.14.1+xpu and Intel's Level Zero runtime): passes
+  `verify`, a 5,700-character text 0.27 s instead of 0.81 s on the CPU; `DETECTION_ACCELERATOR=torch-xpu npm run
+  test:model` gives the same results as the CPU in 83 s instead of 167 s.
 - Docling: 2 pages with a scanned page 16 to 25 s; about 70 to 90 s per formula with `--formulas`.
 - Presidio adds 0.1 to 0.5 s per text once its language model is loaded (2 to 3 s for the first text per language).

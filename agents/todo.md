@@ -23,7 +23,9 @@ batches of 32 on an NVIDIA GPU, measured on Windows with an RTX 2070 (ADR 0006).
 Still to do:
 - Test on the Dell XPS 15 (Windows): the hardware check, then DirectML (`onnxruntime-directml`) and, with an NVIDIA
   GPU, the CUDA build of PyTorch; run `DETECTION_ACCELERATOR=<id> npm run test:model` there.
-- Intel GPU on this laptop: try the XPU build of PyTorch in a separate environment.
+- Intel GPU on this laptop: detection works with the XPU build of PyTorch, now the laptop's `.venv` (2026-10-19,
+  see reference.md); the CPU build is kept in `.venv-cpu`, use `HELPER_PYTHON=.venv-cpu/bin/python` for local
+  desktop builds. Still to try: PDFs with Docling on `xpu`.
 - NPU (Intel Core Ultra): OpenVINO can't run GLiNER yet (dynamic shapes in its LSTM layer) and loads Intel's
   telemetry module. Revisit with a fixed-shape export, a newer OpenVINO, or ONNX Runtime's OpenVINO provider;
   the NPU also needs `intel-level-zero-npu` and `intel-driver-compiler-npu` on Linux.

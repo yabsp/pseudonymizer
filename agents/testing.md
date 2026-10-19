@@ -52,6 +52,8 @@ PDFs can be served temporarily by copying a synthetic file into `public/` and de
 ## Pitfalls in this environment
 - VS Code activates `.venv`, so `python3` is `.venv/bin/python3` with all packages. Tests that need a missing
   package must use a stand-in (`tests/fixtures/no_gliner/`), never rely on the shell's Python.
+- The GLiNER stand-in runs with `.venv`'s real PyTorch, which on this laptop is the XPU build (CPU build in
+  `.venv-cpu`). With "auto" the helper then tries the Intel GPU; tests that check `runtime` ask for `torch-cpu`.
 - VS Code also sets `ELECTRON_RUN_AS_NODE`: Electron started from this shell exits silently. Unset it, or use
   `npm run desktop`.
 - `pkill -f <pattern>` also matches the shell running it if the command line contains the pattern; it then kills

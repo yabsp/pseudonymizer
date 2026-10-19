@@ -60,7 +60,7 @@ and what to install for it. Install one of these into `.venv`:
 | NVIDIA GPU (Linux, Windows) | the CUDA build of PyTorch, from the selector on pytorch.org | detection and PDFs |
 | NVIDIA GPU, alternative | `pip uninstall onnxruntime`, then `pip install onnxruntime-gpu` | detection |
 | Any GPU on Windows (NVIDIA, Intel, AMD) | `pip uninstall onnxruntime`, then `pip install onnxruntime-directml` | detection; a good first try on laptops |
-| Intel GPU (Linux, Windows) | the XPU build of PyTorch from pytorch.org, and Intel's GPU drivers | detection and PDFs; not tested yet |
+| Intel GPU (Linux, Windows) | the XPU build of PyTorch and torchvision (`--index-url https://download.pytorch.org/whl/xpu`), and Intel's GPU drivers (Level Zero) | detection and PDFs; detection about 3 times faster on an Intel Arc iGPU |
 | Apple silicon | nothing extra | later macOS version |
 
 For PDFs, the CUDA build of PyTorch makes formula conversion about 5 times faster (tested with an RTX 2070); it
