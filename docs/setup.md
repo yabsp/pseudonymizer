@@ -101,6 +101,17 @@ documents"); they ship with the app. Windows gets a ZIP instead of an installer:
 an NSIS installer can hold (docs/adr/0008-desktop-packaging.md). For the GPU variant, set `HELPER_PYTHON` to the
 `python.exe` of a separate environment with the CUDA build of PyTorch, the requirements and PyInstaller.
 
+The build takes PyTorch from the environment it is built from, so the app only uses the GPU that environment's
+PyTorch supports. For an Intel GPU on Linux, build from an environment with PyTorch's XPU build (see "Hardware
+acceleration"), with the requirements, the spaCy models and PyInstaller in it:
+```
+HELPER_PYTHON=.venv-xpu/bin/python npm run dist:linux    # or without HELPER_PYTHON if .venv has the XPU build
+```
+The app then finds the Intel GPU (Settings > Detection > Advanced > "This computer"); it is about 5 GB, and it
+needs Intel's GPU drivers on the computer it runs on. Keep it for your own computer: Intel's GPU libraries in it
+may not be passed on as they are (see agents/todo.md). If `.venv` has the XPU build and you want the normal app,
+build it from an environment with the CPU build, e.g. `HELPER_PYTHON=.venv-cpu/bin/python npm run dist:linux`.
+
 ### With GitHub Actions
 `.github/workflows/desktop.yml` runs the tests on Linux and Windows, then builds the Linux AppImage and the
 Windows ZIP; the Windows GPU ZIP only when asked. It starts on a version tag (`git push origin v0.1.0`; the

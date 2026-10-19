@@ -25,7 +25,7 @@ Still to do:
   GPU, the CUDA build of PyTorch; run `DETECTION_ACCELERATOR=<id> npm run test:model` there.
 - Intel GPU on this laptop: detection works with the XPU build of PyTorch, now the laptop's `.venv` (2026-10-19,
   see reference.md); the CPU build is kept in `.venv-cpu`, use `HELPER_PYTHON=.venv-cpu/bin/python` for local
-  desktop builds. Still to try: PDFs with Docling on `xpu`.
+  desktop builds (docs/setup.md). PDFs run on `xpu` too (a synthetic page, 2026-10-19); speed not measured yet.
 - NPU (Intel Core Ultra): OpenVINO can't run GLiNER yet (dynamic shapes in its LSTM layer) and loads Intel's
   telemetry module. Revisit with a fixed-shape export, a newer OpenVINO, or ONNX Runtime's OpenVINO provider;
   the NPU also needs `intel-level-zero-npu` and `intel-driver-compiler-npu` on Linux.
