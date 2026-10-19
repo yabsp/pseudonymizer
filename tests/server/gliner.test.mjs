@@ -43,7 +43,9 @@ describe('GLiNER detection endpoint', () => {
     for (const accelerator of ['cuda', 'onnx-azure', 'torch-cuda --x', '', 7]) {
       assert.equal((await detect({ text: TEXT, accelerator })).status, 400, String(accelerator));
     }
-    const res = await detect({ text: TEXT, accelerator: 'auto' });
+    // "auto" depends on this machine's PyTorch (.venv may have a GPU build), so only the CPU's id is checked.
+    assert.equal((await detect({ text: TEXT, accelerator: 'auto' })).status, 200);
+    const res = await detect({ text: TEXT, accelerator: 'torch-cpu' });
     assert.equal(res.status, 200);
     assert.equal(res.json().runtime.id, 'torch-cpu');
   });

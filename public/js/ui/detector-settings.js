@@ -5,6 +5,10 @@ import { $, h, setStatus } from './dom.js';
 import { readSettings, scheduleSave } from './settings-store.js';
 
 let isGlinerBroken = false;
+// appKind === null: not known yet (or an older server); otherwise "server" or "desktop", from api/about.
+let appKind = null;
+// The back ends api/hardware reported as usable, in the order "auto" tries them; [] until it answered.
+let usableBackends = [];
 
 // Presidio runs in the GLiNER helper together with GLiNER, so both share its readiness.
 const usesGliner = (detector) => detector === 'gliner' || detector === 'presidio';
@@ -18,13 +22,13 @@ export function updateModelAlert() {
 const ABOUT_TIMEOUT_MS = 3000;
 
 /**
- * Removes detectors this app doesn't have (the desktop app ships without Presidio). A saved choice that is gone
- * switches to GLiNER, and the user is told, so nothing silently runs with a different detector.
+ * Removes detectors this app doesn't have. A saved choice that is gone switches to GLiNER, and the user is told,
+ * so nothing silently runs with a different detector.
  */
 export async function limitToAvailableDetectors() {
   let available;
   try {
-    ({ detectors: available } = await callServer('api/about', { signal: AbortSignal.timeout(ABOUT_TIMEOUT_MS) }));
+    ({ detectors: available, app: appKind } = await callServer('api/about', { signal: AbortSignal.timeout(ABOUT_TIMEOUT_MS) }));
   } catch {
     return; // an older or unreachable server: keep every option, detection reports its own errors
   }
@@ -98,7 +102,8 @@ export async function loadHardware(saved = $('accelerator').value) {
     return;
   }
   const select = $('accelerator');
-  select.replaceChildren(new Option('Automatic (recommended)', 'auto'), ...renderHardware(report).map((b) => new Option(b.label, b.id)));
+  usableBackends = renderHardware(report);
+  select.replaceChildren(new Option('Automatic (recommended)', 'auto'), ...usableBackends.map((b) => new Option(b.label, b.id)));
   const isUsable = [...select.options].some((o) => o.value === saved);
   select.value = isUsable ? saved : 'auto';
   if (!isUsable && saved) {
@@ -107,20 +112,67 @@ export async function loadHardware(saved = $('accelerator').value) {
   }
 }
 
+/**
+ * Keeps the saved hardware choice selected while the hardware is being checked; the list only has "Automatic"
+ * until then, and saving another setting meanwhile would otherwise overwrite the choice with it.
+ */
+export function keepSavedAccelerator(saved) {
+  const select = $('accelerator');
+  if (!saved || [...select.options].some((o) => o.value === saved)) return;
+  select.append(new Option('Your saved choice (checking the hardware…)', saved));
+  select.value = saved;
+}
+
 export function markDetectorReady(detector) {
   if (usesGliner(detector) && isGlinerBroken) setGlinerReady(null);
 }
 
+// "auto" never picks ONNX Runtime on the CPU (python/accelerators.py, AUTO_ORDER).
+const isAutoCandidate = (backend) => backend.id !== 'onnx-cpu';
+
+/** The label of the GPU detection is about to be checked on, or null for the CPU or when that is not known yet. */
+function expectedGpu() {
+  const choice = $('accelerator').value;
+  const backend = choice === 'auto' ? usableBackends.find(isAutoCandidate) : usableBackends.find((b) => b.id === choice);
+  return backend && !backend.id.endsWith('-cpu') ? backend.label : null;
+}
+
+/** What the model is doing while it loads; the download only happens outside the desktop app, which ships it. */
+function describeLoading() {
+  const gpu = expectedGpu();
+  const steps = gpu ? `Loading the model and checking it on the ${gpu} against the CPU…` : 'Loading the model…';
+  return appKind === 'desktop' ? steps : `${steps} If it is not on this computer yet, it is downloaded once (about 1.2 GB).`;
+}
+
+/** The line on the main page while detection gets ready; empty once it is. */
+const showStartup = (message, isError = false) => setStatus('startupStatus', message, isError);
+
 /** Loads the model in the background, so the first detection doesn't wait for it. */
 export async function warmUpGliner() {
-  if (!usesGliner($('detector').value)) return;
-  setStatus('glinerStatus', 'Loading the model… (the first time, it is downloaded once, about 1.2 GB)');
+  if (!usesGliner($('detector').value)) return showStartup('');
+  setStatus('glinerStatus', describeLoading());
+  showStartup('Getting detection ready: loading the model…');
   try {
     const { runtime } = await detectWithGliner('', {}, readSettings());
     setGlinerReady(runtime);
+    showStartup(runtime?.notice ?? '', Boolean(runtime?.notice));
   } catch (e) {
     isGlinerBroken = true;
     setStatus('glinerStatus', 'GLiNER is not ready: ' + e.message, true);
+    showStartup('Detection is not ready. See Settings > Detection.', true);
     updateModelAlert();
   }
+}
+
+/**
+ * At startup: checks the hardware, then loads the model on it. The page is usable meanwhile; a detection started
+ * now waits for the model in the helper. savedAccelerator is the saved choice, which needs the hardware list.
+ */
+export async function startDetection(savedAccelerator) {
+  if (usesGliner($('detector').value)) {
+    setStatus('glinerStatus', 'Checking the hardware…');
+    showStartup('Getting detection ready: checking the hardware…');
+  }
+  await loadHardware(savedAccelerator);
+  await warmUpGliner();
 }

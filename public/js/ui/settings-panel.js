@@ -1,18 +1,24 @@
 import { $, setStatus } from './dom.js';
-import { limitToAvailableDetectors, loadHardware, loadOllamaModels, showDetectorFields, updateModelAlert, warmUpGliner } from './detector-settings.js';
+import { keepSavedAccelerator, limitToAvailableDetectors, loadOllamaModels, showDetectorFields, updateModelAlert, warmUpGliner } from './detector-settings.js';
 import { applySavedSettings, readSavedSettings, scheduleSave } from './settings-store.js';
 import { loadAdapters, selectModel, showModelChoices, updateTargetName } from './target-settings.js';
 
+/**
+ * Shows the saved settings with the fields of the saved detector; resolves to the saved settings. The hardware
+ * check and loading the model come after (startDetection), so the page doesn't wait for them.
+ */
 export async function loadSettings() {
   await loadAdapters();
   const saved = await readSavedSettings();
   applySavedSettings(saved);
-  await limitToAvailableDetectors();
-  await loadHardware(saved.accelerator || 'auto');
+  keepSavedAccelerator(saved.accelerator);
   showModelChoices();
   showDetectorFields();
-  await loadOllamaModels(saved.ollamaModel || '');
   updateTargetName();
+  await limitToAvailableDetectors();
+  showDetectorFields();
+  await loadOllamaModels(saved.ollamaModel || '');
+  return saved;
 }
 
 function switchCli() {

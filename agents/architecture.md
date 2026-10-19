@@ -56,7 +56,9 @@ AI tool the user has installed and logged in to.
 - **UI** (`public/js/ui/`): one module per part of the page, each with an `init…` function that
   `main.js` calls. Workflow state lives in `ui/workflow.js`; settings live in the form fields. Elements are
   built with `h()` from `ui/dom.js`, which only ever sets text. No framework and no build step
-  (`docs/adr/0002-frontend-without-framework.md`).
+  (`docs/adr/0002-frontend-without-framework.md`). At startup `loadSettings()` shows the saved settings first;
+  then `startDetection()` (`ui/detector-settings.js`) checks the hardware and loads the model in the background,
+  reporting each step in Settings and on the main page (`#startupStatus`).
 - **Importers** (`public/js/import/`): one file per document format, registered in `IMPORTERS`, each
   `read(file, options) -> { text, document? }`. Text files fill the text box; a PDF becomes a document
   (`state.document` in `ui/workflow.js`) that is sent as an attachment inside the message or saved as Markdown.
@@ -87,8 +89,8 @@ AI tool the user has installed and logged in to.
   answer per line on stdout, matched by `id`:
   `{"id", "text", "labels", "threshold", "model", "engine", "language"}` ->
   `{"id", "entities": [{"text", "label", "start", "end", "score", "source"}], "language"}` or `{"id", "error"}`.
-  GLiNER reads the text in windows of 150 words; windows with underscores inside words ("Vertrag_Mueller.pdf")
-  are read a second time with spaces instead, so names in file names are found.
+  GLiNER reads the text in windows of 150 words, several per call on a GPU; windows with underscores inside words
+  ("Vertrag_Mueller.pdf") are read a second time with spaces instead, so names in file names are found.
   `engine` is `gliner` (default) or `presidio`, which adds Presidio's values (`source: "presidio"`, `label` a
   Presidio type such as `PERSON`) and the `language` used (`auto` is guessed from frequent words). An empty
   text only loads GLiNER. `python/presidio_detection.py` is the only file that uses Presidio: it loads a

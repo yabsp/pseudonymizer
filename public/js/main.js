@@ -1,7 +1,7 @@
 import { initBusyOverlay } from './ui/busy.js';
 import { initDocuments } from './ui/documents.js';
 import { initInfoTips } from './ui/info.js';
-import { warmUpGliner } from './ui/detector-settings.js';
+import { startDetection } from './ui/detector-settings.js';
 import { initNotifications, showNotificationState } from './ui/notifications.js';
 import { initPromptsPanel, loadPrompts } from './ui/prompts-panel.js';
 import { initSettingsPanel, loadSettings } from './ui/settings-panel.js';
@@ -19,8 +19,8 @@ initDocuments();
 initNotifications();
 initInfoTips();
 
-await loadSettings();
+const saved = await loadSettings();
 showNotificationState();
 refresh();
-void warmUpGliner();
+void startDetection(saved.accelerator || 'auto');
 await loadPrompts();

@@ -38,8 +38,7 @@ def load_checked(name, requested):
     if backend == 'torch-cpu':
         return accelerators.load_gliner(name, backend), runtime
     try:
-        model = accelerators.load_gliner(name, backend)
-        same, _reference, _found = accelerators.verify(model, name)
+        model, same = accelerators.load_verified(name, backend)
     except Exception as e:  # reported below, as the reason for using the CPU
         same, problem = False, f'could not be used ({type(e).__name__}: {e})'
     else:
@@ -61,11 +60,11 @@ def get_model(name, requested='auto'):
     return loaded['model']
 
 
-def predict(model, text, labels, threshold):
-    """Fails instead of returning a partial result if GLiNER still had to cut the text."""
+def predict(model, texts, labels, threshold, batch_size):
+    """[entities per text]. Fails instead of returning a partial result if GLiNER still had to cut a text."""
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter('always')
-        entities = model.predict_entities(text, labels, threshold=threshold)
+        entities = model.inference(texts, labels, threshold=threshold, batch_size=batch_size)
     for w in caught:
         if 'truncated' in str(w.message):
             raise RuntimeError(f'GLiNER could not read the whole text ({w.message}); nothing was detected')
@@ -85,25 +84,24 @@ def windows(text):
 
 def detect_with_gliner(text, request):
     model = get_model(request['model'], request.get('accelerator', 'auto'))
+    # (text read, start, end) of every window. GLiNER reads "Vertrag_Mueller_Brandenberger.pdf" as one word and
+    # never finds the names in it. The windows with such underscores are read again with spaces instead; a space
+    # replaces each one, so the offsets and the values taken from the original text stay right ("Mueller_Brandenberger").
+    readings = [(text, start, end) for start, end in windows(text)]
+    spaced = UNDERSCORE_IN_WORD.sub(' ', text)
+    if spaced != text:
+        readings += [(spaced, start, end) for start, end in windows(spaced) if spaced[start:end] != text[start:end]]
+    if not readings:
+        return []
+    found = predict(model, [reading[start:end] for reading, start, end in readings], request['labels'],
+                    request.get('threshold', 0.4), accelerators.batch_size(loaded['runtime']['id']))
     best_by_span = {}
-
-    def read(reading, start, end):
-        for e in predict(model, reading[start:end], request['labels'], request.get('threshold', 0.4)):
+    for (_reading, start, _end), entities in zip(readings, found):
+        for e in entities:
             span = (start + e['start'], start + e['end'])
             if span not in best_by_span or e['score'] > best_by_span[span]['score']:
                 best_by_span[span] = {'text': text[span[0]:span[1]], 'label': e['label'], 'start': span[0], 'end': span[1],
                                       'score': round(e['score'], 3), 'source': 'gliner'}
-
-    for start, end in windows(text):
-        read(text, start, end)
-    # GLiNER reads "Vertrag_Mueller_Brandenberger.pdf" as one word and never finds the names in it. The windows
-    # with such underscores are read again with spaces instead; a space replaces each one, so the offsets and the
-    # values taken from the original text stay right ("Mueller_Brandenberger").
-    spaced = UNDERSCORE_IN_WORD.sub(' ', text)
-    if spaced != text:
-        for start, end in windows(spaced):
-            if spaced[start:end] != text[start:end]:
-                read(spaced, start, end)
     return sorted(best_by_span.values(), key=lambda e: e['start'])
 
 

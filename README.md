@@ -56,8 +56,9 @@ either. Formulas are marked at first; "Convert formulas" turns them into LaTeX (
 processor, under a second with an NVIDIA graphics card).
 
 ## Good to know
-- Detecting values takes a few seconds per page on a laptop; the first detection after starting also loads the
-  model (about 10 seconds).
+- When the app starts, it gets detection ready in the background (about 10 seconds); the page says when it is
+  checking the hardware and loading the model. Detecting then takes a few seconds per page on a laptop's
+  processor, and less than a second per page with a usable graphics card.
 - Swiss towns are hidden also without a postal code ("aus Hochdorf"); a court's seat ("Bezirksgericht Hochdorf")
   stays readable unless the town also appears elsewhere in the text.
 - Presidio reads German, French and English; an Italian text is reported, as there is no Italian language model

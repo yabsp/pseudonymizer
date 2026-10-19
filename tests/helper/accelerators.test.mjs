@@ -129,8 +129,66 @@ print(json.dumps(runtime))`, CANARY);
     assert.deepEqual(runtime, { id: 'onnx-cuda', label: 'NVIDIA GPU (ONNX Runtime CUDA)', verified: true });
   });
 
+  it('loads a model for a PyTorch GPU once: checked on the CPU, then moved', () => {
+    const answer = runPython(`
+import json, accelerators, gliner_helper
+accelerators.resolve = lambda requested: 'torch-xpu'
+loads = []
+real_load = accelerators.load_gliner
+def counting_load(name, backend):
+    loads.append(backend)
+    return real_load(name, backend)
+accelerators.load_gliner = counting_load
+model, runtime = gliner_helper.load_checked('urchade/gliner_multi_pii-v1', 'torch-xpu')
+print(json.dumps({'loads': loads, 'device': model.device, 'runtime': runtime}))`, CANARY);
+    assert.deepEqual(answer, { loads: ['torch-cpu'], device: 'xpu', runtime: { id: 'torch-xpu', label: 'Intel GPU (PyTorch XPU)', verified: true } });
+  });
+
+  it('falls back to the CPU when a PyTorch GPU finds different values after the move', () => {
+    const runtime = runPython(`
+import json, accelerators, gliner, gliner_helper
+accelerators.resolve = lambda requested: 'torch-xpu'
+real_to = gliner.GLiNER.to
+def computes_wrongly(self, device):
+    if device != 'cpu':
+        self.predict_entities = lambda *args, **kwargs: []
+    return real_to(self, device)
+gliner.GLiNER.to = computes_wrongly
+model, runtime = gliner_helper.load_checked('urchade/gliner_multi_pii-v1', 'torch-xpu')
+print(json.dumps(runtime))`, CANARY);
+    assert.equal(runtime.id, 'torch-cpu');
+    assert.match(runtime.notice, /Intel GPU \(PyTorch XPU\) found different values than the CPU.*runs on the CPU/);
+  });
+
   it('never offers an ONNX Runtime provider outside the local allowlist', () => {
     const providers = runPython('import json, accelerators; print(json.dumps(sorted(accelerators.ONNX_PROVIDERS.values())))');
     assert.deepEqual(providers, ['CPUExecutionProvider', 'CUDAExecutionProvider', 'CoreMLExecutionProvider', 'DmlExecutionProvider']);
+  });
+});
+
+describe('reading the windows of a long text', () => {
+  // Names spread over a text of 2000 words, so it has many windows.
+  const NAMES = { 'Reto Ammann': ['person', 0.9], 'Laura Bianchi': ['person', 0.9] };
+  const readAs = (backend) => runPython(`
+import json, gliner_helper
+words = [f'wort{i}' for i in range(2000)]
+words[5], words[1990] = 'Reto Ammann', 'Laura Bianchi'
+model, _runtime = gliner_helper.load_checked('urchade/gliner_multi_pii-v1', 'torch-cpu')
+calls = []
+real_inference = model.inference
+def recording_inference(texts, labels, threshold=0.5, batch_size=8):
+    calls.append(batch_size)
+    return real_inference(texts, labels, threshold=threshold, batch_size=batch_size)
+model.inference = recording_inference
+gliner_helper.get_model = lambda name, requested='auto': model
+gliner_helper.loaded['runtime'] = {'id': '${backend}'}
+found = gliner_helper.detect_with_gliner(' '.join(words), {'model': 'urchade/gliner_multi_pii-v1', 'labels': ['person']})
+print(json.dumps({'batchSizes': calls, 'found': [e['text'] for e in found]}))`, NAMES);
+
+  it('reads them in batches on a GPU and one at a time on the CPU, with the same values', () => {
+    const gpu = readAs('torch-xpu');
+    const cpu = readAs('torch-cpu');
+    assert.deepEqual(gpu, { batchSizes: [8], found: ['Reto Ammann', 'Laura Bianchi'] });
+    assert.deepEqual(cpu, { batchSizes: [1], found: ['Reto Ammann', 'Laura Bianchi'] });
   });
 });

@@ -52,10 +52,20 @@ patient. Today "Edit values" can save the list as JSON and load it again, but on
 - Validate loaded lists (`parseMapping`): types, duplicate values, placeholder format, a size limit.
 
 ## Other open items
-- Desktop app speed: load the model at app start with a visible "preparing" state; keep it loaded in the system
-  tray after the window closes; an uncompressed Linux package (`.deb` or `.tar.gz`, the AppImage loads the model
-  twice as slowly); a tuned thread count (4 threads were 25% faster than 16 on this laptop). Waiting for a decision.
-- PDF documents in the desktop app: bundle Docling and its models (about 1.3 GB more).
+- Desktop app speed (the model now loads at startup, with its steps shown): keep it loaded in the system tray
+  after the window closes; an uncompressed Linux package (`.deb` or `.tar.gz`, the AppImage loads the model twice
+  as slowly); a tuned thread count (4 threads were 25% faster than 16 on this laptop). Waiting for a decision.
+- Formula conversion time: the UI and README say about 10 s per formula on a desktop processor (ADR 0006,
+  i9-9900K, float32), reference.md says 70 to 90 s on this laptop (probably measured before ADR 0006). Measure
+  again with a synthetic PDF with formulas, on the CPU and on the Arc iGPU, and correct whichever is wrong.
+- Pseudonymizing agentic CLIs (Codex, Claude Code, Gemini CLI) automatically: MCP can't do it (a tool server only
+  sees what the model chooses to send it, after the model already has the prompt). A local proxy could: all three
+  CLIs can send to another endpoint (Codex `model_providers.<id>.base_url` in `~/.codex/config.toml`, Claude Code
+  `ANTHROPIC_BASE_URL`, Gemini CLI `GOOGLE_GEMINI_BASE_URL`). Open decision, because it conflicts with
+  invariant 5 (the user reviews exactly what is sent) and needs: every request including file contents and tool
+  results pseudonymized, placeholders restored in streamed answers and tool calls, failing closed when detection
+  fails, a check per CLI whether a custom endpoint still works with the subscription login, and a security
+  review (ADR).
 - Remove the Italian spaCy model (`it_core_news_lg`, CC BY-NC-SA 3.0, non-commercial use only) before the app is
   used commercially: drop `it` from `SPACY_MODELS` in `python/presidio_detection.py`,
   uninstall it from `.venv`, update docs/setup.md, and decide whether Italian texts then use GLiNER alone (Presidio would report a

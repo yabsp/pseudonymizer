@@ -41,7 +41,7 @@ async function saveSettings() {
     const { file } = await callServer('api/settings', { method: 'PUT', body: settings });
     setStatus('settingsStatus', `Saved to ${file}.`);
   } catch (e) {
-    setStatus('settingsStatus', `Saved in this browser only, not to a file (${e.message}). Start the app with "npm start" to save to settings.json.`, true);
+    setStatus('settingsStatus', `Saved in this browser only, not to a file (${e.message}).`, true);
   }
 }
 

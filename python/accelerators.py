@@ -44,6 +44,8 @@ INSTALL_HINTS = {
     'onnx-cpu': 'Install onnxruntime into .venv.',
 }
 COMMAND_TIMEOUT_S = 5
+# Windows per GLiNER call on a GPU; 8 and 16 gave the same values as one at a time on the Arc iGPU.
+GPU_BATCH_WINDOWS = 8
 # Where exported ONNX models are kept: PSEUDONYMIZER_CACHE, or the user's cache folder.
 CACHE_DIR = os.environ.get('PSEUDONYMIZER_CACHE') or os.path.join(
     os.environ.get('LOCALAPPDATA') or os.path.join(os.path.expanduser('~'), '.cache'), 'pseudonymizer')
@@ -255,6 +257,26 @@ def verify(model, model_name):
     reference = _findings(load_gliner(model_name, 'torch-cpu'))
     candidate = _findings(model)
     return same_findings(reference, candidate), reference, candidate
+
+
+def load_verified(model_name, backend):
+    """(model on the back end, whether it finds the same values as the CPU). A PyTorch GPU gets the model loaded
+    once: checked on the CPU first, then moved, instead of a second copy loaded only for the check (3 to 5 s)."""
+    if backend in TORCH_DEVICES:
+        model = load_gliner(model_name, 'torch-cpu')
+        reference = _findings(model)
+        model.to(TORCH_DEVICES[backend])
+        return model, same_findings(reference, _findings(model))
+    model = load_gliner(model_name, backend)
+    same, _reference, _candidate = verify(model, model_name)
+    return model, same
+
+
+def batch_size(backend):
+    """How many windows GLiNER reads per call: a GPU is mostly waiting between small calls, so it gets several at
+    once (2 to 4 times faster on an Intel Arc iGPU, same values). The CPU reads one at a time: batching gained
+    little there, and padding in small batches changed a few scores (agents/reference.md, measurements)."""
+    return 1 if backend in ('torch-cpu', 'onnx-cpu') else GPU_BATCH_WINDOWS
 
 
 if __name__ == '__main__':

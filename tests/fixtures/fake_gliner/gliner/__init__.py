@@ -22,6 +22,13 @@ class GLiNER:
         print(f'Loading {name}... (libraries sometimes print to stdout)')
         return cls()
 
+    def to(self, device):
+        self.device = device
+        return self
+
+    def inference(self, texts, labels, threshold=0.5, batch_size=8):
+        return [self.predict_entities(text, labels, threshold) for text in texts]
+
     def predict_entities(self, text, labels, threshold=0.5):
         words = list(WORD.finditer(text))
         visible = text

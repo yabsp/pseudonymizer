@@ -51,7 +51,9 @@ Read and validated in `server/config.js` only (except `desktop/main.js`, which s
   `{ id, probe: true }`. Answers `{ id, entities, language?, runtime }`, `{ id, system, backends }` or
   `{ id, error }`. An empty text only loads the model. Texts are read in windows of 150 GLiNER words with an
   overlap of 40 (GLiNER reads at most 384 words and silently cuts the rest; the helper fails instead of
-  returning a partial result). Windows with `_` inside words are read a second time with spaces.
+  returning a partial result). Windows with `_` inside words are read a second time with spaces. On a GPU the
+  windows are read 8 per call (`batch_size()` in `python/accelerators.py`), on the CPU one at a time. A PyTorch GPU
+  gets the model loaded once: checked on the CPU, then moved (`load_verified`).
 - `python/presidio_detection.py`: one spaCy model per language, loaded on first use, never downloaded (Presidio
   would download missing ones). Recognizers for `EMAIL_ADDRESS` and `URL` are removed (the e-mail one fetches a
   domain list through tldextract; the URL one cuts e-mail addresses apart). Spans are split at line breaks and
@@ -138,10 +140,15 @@ telemetry module).
 
 ## Measurements (Intel Core Ultra 7 155H, CPU, noisy laptop)
 - GLiNER: model load 5 to 7 s (AppImage 14 s, because it decompresses); a 5,000-character letter 5 to 8 s; a
-  100-row CSV 9 to 21 s. Batching windows was slower; naive int8 quantization broke the model; 4 threads were
+  100-row CSV 9 to 21 s. Batching windows gained little on the CPU (16 instead of 18.5 s for 16 windows; batches
+  of 4 changed a few scores), so the CPU reads one at a time; naive int8 quantization broke the model; 4 threads were
   about 25% faster than 16 (hybrid cores); ONNX Runtime on the CPU was no faster than PyTorch.
-- GLiNER on the Arc iGPU (`torch-xpu`, PyTorch 2.14.1+xpu and Intel's Level Zero runtime): passes
-  `verify`, a 5,700-character text 0.27 s instead of 0.81 s on the CPU; `DETECTION_ACCELERATOR=torch-xpu npm run
-  test:model` gives the same results as the CPU in 83 s instead of 167 s.
+- GLiNER on the Arc iGPU (`torch-xpu`, PyTorch 2.14.1+xpu and Intel's Level Zero runtime), 2026-10-19: passes
+  `verify`. 16 windows with the 25 default labels: 6.1 s one per call, 1.5 to 2.9 s in batches of 8 or 16 (same
+  values and scores), CPU 15 to 18 s. float16 and bfloat16 autocast were slower than float32 and changed values
+  (bfloat16 lost certain ones); `SYCL_CACHE_PERSISTENT=1` made the start slower and wrote 1.1 GB. Through the
+  API from a cold start: hardware check 3.3 s, loading and checking the model 6.9 s (16.7 s when it was loaded a
+  second time for the check), a 4,775-character text 0.85 s (4.7 s before batching), with Presidio 3.9 s.
+  `DETECTION_ACCELERATOR=torch-xpu npm run test:model` gives the same results as the CPU in 71 s (CPU 167 to 198 s).
 - Docling: 2 pages with a scanned page 16 to 25 s; about 70 to 90 s per formula with `--formulas`.
 - Presidio adds 0.1 to 0.5 s per text once its language model is loaded (2 to 3 s for the first text per language).
