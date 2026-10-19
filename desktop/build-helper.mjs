@@ -41,6 +41,20 @@ function torchvisionLibraries() {
     .flatMap((name) => ['--add-binary', `${path.join(folder, name)}${path.delimiter}torchvision`]);
 }
 
+// PyTorch's XPU build (Intel GPUs) reaches the GPU through SYCL's adapters, which its loader opens by name at run
+// time, so PyInstaller can't see them either; without them the helper finds no Intel GPU. Linux only for now: the
+// XPU build on Windows names them differently and hasn't been built yet. Environments without them get nothing.
+function syclAdapters() {
+  if (IS_WINDOWS) return [];
+  const found = spawnSync(VENV_PYTHON, ['-c', 'import sys; print(sys.prefix)'], { encoding: 'utf8' });
+  const folder = path.join(found.stdout.trim(), 'lib');
+  // The names the loader opens: libur_adapter_level_zero.so.0, libur_adapter_level_zero_v2.so.0, libur_adapter_opencl.so.0
+  const ADAPTER = /^libur_adapter_\w+\.so\.0$/;
+  if (!found.stdout.trim() || !fs.existsSync(folder)) return [];
+  return fs.readdirSync(folder).filter((name) => ADAPTER.test(name))
+    .flatMap((name) => ['--add-binary', `${path.join(folder, name)}${path.delimiter}.`]);
+}
+
 const args = [
   '-m', 'PyInstaller', '--noconfirm', '--onedir', '--console', '--name', 'detection-helper',
   '--distpath', path.join(ROOT, 'build', 'helper'),
@@ -53,6 +67,7 @@ const args = [
   ...WITH_METADATA.flatMap((name) => ['--copy-metadata', name]),
   ...LEFT_OUT.flatMap((name) => ['--exclude-module', name]),
   ...torchvisionLibraries(),
+  ...syclAdapters(),
   path.join(ROOT, 'python', 'gliner_helper.py'),
 ];
 const result = spawnSync(VENV_PYTHON, args, { stdio: 'inherit', cwd: ROOT });
