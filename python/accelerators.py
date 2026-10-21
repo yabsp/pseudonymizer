@@ -83,6 +83,14 @@ def _cpu_name():
             pass  # fall back to platform.processor() below
     if sys.platform == 'darwin':
         return _run(['sysctl', '-n', 'machdep.cpu.brand_string']) or platform.processor()
+    if sys.platform == 'win32':
+        # platform.processor() on Windows is only the family ("Intel64 Family 6 Model 189 ..."); the name is here.
+        try:
+            import winreg
+            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r'HARDWARE\DESCRIPTION\System\CentralProcessor\0') as key:
+                return winreg.QueryValueEx(key, 'ProcessorNameString')[0].strip()
+        except OSError:
+            pass  # fall back to platform.processor() below
     return platform.processor() or platform.machine()
 
 

@@ -2,7 +2,7 @@ import { callServer } from '../server-api.js';
 import { DEFAULT_GLINER_MODEL } from './gliner.js';
 import { categoryForLabel } from './gliner-labels.js';
 
-export const LANGUAGE_NAMES = { de: 'German', fr: 'French', it: 'Italian', en: 'English' };
+export const LANGUAGE_NAMES = { de: 'German', fr: 'French', en: 'English' };
 
 // Presidio's entity types; a type not listed here still becomes a value to hide, as OTHER. Plain dates and
 // nationalities are ignored, as with GLiNER, whose labels only ask for dates of birth: replacing every date

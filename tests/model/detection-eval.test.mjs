@@ -44,11 +44,11 @@ const DETECTORS = {
       'escalation-email-en': ['Honda Civic'],
       'trustee-notes-de-ch': ['Vorbezüge'],
       'r1-auth-log-en': ['auth-service', 'api-gw'],
-      'r1-lab-report-it': ['Emoglobina', 'Ferritina'],
-      'r2-invoice-it': ['Pagamento entro 30 giorni', 'Assistenza legale'],
       'r6-lab-results-de': ['Kreatinin', 'Thrombozyten'],
       'r9-dataroom-index-en': ['D&O insurance'],
     },
+    // Presidio refuses Italian texts (no Italian spaCy model for commercial use); GLiNER alone reads them above.
+    refuses: ['it'],
   },
 };
 
@@ -59,14 +59,20 @@ function pseudonymizeAsTheApp(doc, entities) {
   return pseudonymize(addDetected(mapping, entities, doc.text, COMMON_WORDS), doc.text);
 }
 
-for (const [detector, { path: apiPath, knownMisses, knownChanges }] of Object.entries(DETECTORS)) {
+for (const [detector, { path: apiPath, knownMisses, knownChanges, refuses = [] }] of Object.entries(DETECTORS)) {
+  const documents = DOCUMENTS.filter((doc) => !refuses.includes(doc.language));
   describe(`real ${detector} detection on realistic documents`, { skip: SKIP }, () => {
     let server;
     const results = new Map();
 
     before(async () => {
       server = await startServer({ env: { GLINER_PYTHON: PYTHON } });
-      for (const doc of DOCUMENTS) {
+      for (const doc of DOCUMENTS.filter((d) => refuses.includes(d.language))) {
+        const res = await server.api('POST', apiPath, { text: doc.text, labels: Object.keys(GLINER_LABELS), threshold: THRESHOLD, model: MODEL, language: 'auto', accelerator: ACCELERATOR });
+        assert.equal(res.status, 502, `${doc.id} was not refused`);
+        assert.match(res.json().error, /does not read Italian/);
+      }
+      for (const doc of documents) {
         const started = Date.now();
         const res = await server.api('POST', apiPath, { text: doc.text, labels: Object.keys(GLINER_LABELS), threshold: THRESHOLD, model: MODEL, language: 'auto', accelerator: ACCELERATOR });
         assert.equal(res.status, 200, res.body);
@@ -83,7 +89,7 @@ for (const [detector, { path: apiPath, knownMisses, knownChanges }] of Object.en
     }, { timeout: 600_000 });
     after(() => server?.close());
 
-    for (const doc of DOCUMENTS) {
+    for (const doc of documents) {
       describe(doc.id, () => {
         for (const value of doc.mustHide) {
           const options = knownMisses[doc.id]?.includes(value) ? knownGap(`missed by ${detector} + patterns at Balanced sensitivity`) : {};
@@ -101,7 +107,7 @@ for (const [detector, { path: apiPath, knownMisses, knownChanges }] of Object.en
     }
 
     it('summary', (t) => {
-      for (const doc of DOCUMENTS) {
+      for (const doc of documents) {
         const { leaked, changed, ms, language } = results.get(doc.id);
         t.diagnostic(`${doc.id}${language ? ` [${language}]` : ''}: ${doc.mustHide.length - leaked.length}/${doc.mustHide.length} hidden in ${ms} ms${leaked.length ? '; visible: ' + leaked.join(' | ') : ''}${changed.length ? '; wrongly changed: ' + changed.join(' | ') : ''}`);
       }

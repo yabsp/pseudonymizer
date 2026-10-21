@@ -33,14 +33,15 @@ doesn't fit the CPU build of PyTorch and stops GLiNER from loading.
 ## Detection with Presidio
 The default detector is GLiNER + Presidio: Presidio adds a second name finder (spaCy) and checks for phone, card
 and bank numbers; it finds more but also lists more words that aren't sensitive. After GLiNER, download a language
-model per language you need (without them, choose GLiNER alone in Settings; the desktop app ships German, French and English):
+model per language you need (Presidio reads German, French and English, and the desktop app ships all three; without
+them, choose GLiNER alone in Settings):
 ```
 .venv/bin/python -m spacy download de_core_news_lg    # German, MIT, about 600 MB
 .venv/bin/python -m spacy download fr_core_news_lg    # French, LGPL-LR, about 600 MB
-.venv/bin/python -m spacy download it_core_news_lg    # Italian, CC BY-NC-SA 3.0: non-commercial use only
 .venv/bin/python -m spacy download en_core_web_lg     # English, MIT, about 430 MB
 ```
-A text in a language whose model is missing is reported, not detected with less protection. Each loaded
+A text in a language whose model is missing, or in another language, is reported, not detected with less
+protection; GLiNER alone reads it. Each loaded
 language needs about 0.7 GB of memory.
 
 ## Opening PDF documents
@@ -102,10 +103,11 @@ an NSIS installer can hold (docs/adr/0008-desktop-packaging.md). For the GPU var
 `python.exe` of a separate environment with the CUDA build of PyTorch, the requirements and PyInstaller.
 
 The build takes PyTorch from the environment it is built from, so the app only uses the GPU that environment's
-PyTorch supports. For an Intel GPU on Linux, build from an environment with PyTorch's XPU build (see "Hardware
-acceleration"), with the requirements, the spaCy models and PyInstaller in it:
+PyTorch supports. For an Intel GPU (Linux or Windows), build from an environment with PyTorch's XPU build (see
+"Hardware acceleration"), with the requirements, the spaCy models and PyInstaller in it:
 ```
-HELPER_PYTHON=.venv-xpu/bin/python npm run dist:linux    # or without HELPER_PYTHON if .venv has the XPU build
+npm run dist:linux    # with the XPU build in .venv; another environment: HELPER_PYTHON=<its python> npm run dist:linux
+npm run dist:win      # Windows, the same
 ```
 The app then finds the Intel GPU (Settings > Detection > Advanced > "This computer"); it is about 5 GB, and it
 needs Intel's GPU drivers on the computer it runs on. Keep it for your own computer: Intel's GPU libraries in it

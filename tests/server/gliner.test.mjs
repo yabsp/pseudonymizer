@@ -130,8 +130,8 @@ describe('Presidio detection endpoint', () => {
     assert.deepEqual(Object.keys(res.json()), ['entities', 'runtime']);
   });
 
-  it('rejects languages other than auto, de, fr, it and en', async () => {
-    for (const language of ['es', 'DE', '../de', '', 3]) assert.equal((await detect({ text: TEXT, language })).status, 400, String(language));
+  it('rejects languages other than auto, de, fr and en, among them Italian', async () => {
+    for (const language of ['it', 'es', 'DE', '../de', '', 3]) assert.equal((await detect({ text: TEXT, language })).status, 400, String(language));
     assert.equal((await detect({ text: TEXT })).status, 200);
   });
 

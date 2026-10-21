@@ -228,14 +228,15 @@
               <option value="auto" selected>Recognize automatically</option>
               <option value="de">German</option>
               <option value="fr">French</option>
-              <option value="it">Italian</option>
               <option value="en">English</option>
             </select>
           </label>
-          <p class="hint">Adds a second name finder and more number checks. <span class="info"><button type="button" class="info-btn" aria-label="More information" aria-describedby="info9">i</button><span class="info-tip" role="tooltip" id="info9">Presidio adds a second name finder (spaCy) and checks for phone, card and bank numbers. It needs a language model per language: the desktop app has German, French and English; for other languages see docs/setup.md.</span></span></p>
+          <p class="hint">Adds a second name finder and more number checks. <span class="info"><button type="button" class="info-btn" aria-label="More information" aria-describedby="info9">i</button><span class="info-tip" role="tooltip" id="info9">Presidio adds a second name finder (spaCy) and checks for phone, card and bank numbers. It reads German, French and English.</span></span></p>
         </div>
         <div data-detector="gliner presidio">
-          <label class="field">GLiNER model <input id="glinerModel" value="urchade/gliner_multi_pii-v1"></label>
+          <label class="field">GLiNER model <input id="glinerModel" value="urchade/gliner_multi_pii-v1" list="glinerModelList"></label>
+          <datalist id="glinerModelList"></datalist>
+          <p id="glinerModelStatus" class="status field" role="status"></p>
           <label class="field">Hardware
             <select id="accelerator"><option value="auto" selected>Automatic (recommended)</option></select>
           </label>

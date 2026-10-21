@@ -135,13 +135,12 @@ describe('Presidio in the helper', () => {
     }
   });
 
-  it('recognizes German, French, Italian and English, and uses English without any hint', async () => {
+  it('recognizes German, French and English, and uses English without any hint', async () => {
     const helper = withPresidio({});
     try {
       const texts = {
         de: GERMAN,
         fr: 'Merci de m\'envoyer votre certificat médical pour le dossier.',
-        it: 'Le invio il signor Matteo per una valutazione della dispnea.',
         en: 'Please call me before Thursday, the board is waiting for your answer.',
         none: 'id,name\n1,Hans Muster\n2,Maria Keller',
       };
@@ -178,12 +177,25 @@ describe('Presidio in the helper', () => {
     }
   });
 
-  it('reports a missing language model instead of downloading it, and still serves other languages', async () => {
-    const helper = withPresidio({}, { FAKE_SPACY_MISSING: 'it_core_news_lg' });
+  it('refuses an Italian text instead of reading it with another language\'s model, and says what to use', async () => {
+    const helper = withPresidio({ 'Matteo Ghirlanda': ['PERSON', 0.85] });
     try {
-      const answer = await presidio(helper, { id: 1, text: 'Le invio il signor Matteo per una valutazione.' });
+      const answer = await presidio(helper, { id: 1, text: 'Le invio il signor Matteo Ghirlanda per una valutazione della dispnea.' });
       assert.equal(answer.entities, undefined);
-      assert.match(answer.error, /spaCy model for Italian \(it_core_news_lg\) is not installed.*docs\/setup\.md/);
+      assert.match(answer.error, /Presidio does not read Italian texts\. Choose "GLiNER"/);
+      assert.match((await presidio(helper, { id: 2, text: GERMAN, language: 'it' })).error, /Presidio does not read Italian texts/);
+      assert.equal((await presidio(helper, { id: 3, text: GERMAN })).language, 'de');
+    } finally {
+      await helper.close();
+    }
+  });
+
+  it('reports a missing language model instead of downloading it, and still serves other languages', async () => {
+    const helper = withPresidio({}, { FAKE_SPACY_MISSING: 'fr_core_news_lg' });
+    try {
+      const answer = await presidio(helper, { id: 1, text: 'Merci de m\'envoyer votre certificat médical pour le dossier.' });
+      assert.equal(answer.entities, undefined);
+      assert.match(answer.error, /spaCy model for French \(fr_core_news_lg\) is not installed.*docs\/setup\.md/);
       assert.equal((await presidio(helper, { id: 2, text: GERMAN })).language, 'de');
     } finally {
       await helper.close();
@@ -201,7 +213,7 @@ describe('Presidio in the helper', () => {
   });
 
   it('only loads GLiNER for an empty text', async () => {
-    const helper = withPresidio({}, { FAKE_SPACY_MISSING: 'de_core_news_lg,fr_core_news_lg,it_core_news_lg,en_core_web_lg' });
+    const helper = withPresidio({}, { FAKE_SPACY_MISSING: 'de_core_news_lg,fr_core_news_lg,en_core_web_lg' });
     try {
       assert.deepEqual(await presidio(helper, { id: 1, text: '', accelerator: 'torch-cpu' }), { id: 1, entities: [], runtime: CPU });
     } finally {

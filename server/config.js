@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -38,6 +39,28 @@ export const HELPER_COMMAND = bundledHelper
 export const DOCUMENT_COMMAND = bundledHelper
   ? { command: bundledHelper, args: ['--extract-document'], cwd: path.dirname(bundledHelper) }
   : { command: GLINER_PYTHON, args: [DOCUMENT_EXTRACTOR], cwd: ROOT };
+// Hugging Face's cache folder for the model "owner/name": "models--owner--name" (each part letters, digits, "_", "." or "-").
+const MODEL_CACHE_FOLDER = /^models--([\w.-]+?)--([\w.-]+)$/;
+// The values Hugging Face accepts for HF_HUB_OFFLINE as "on".
+const ON = /^(?:1|true|yes|on)$/i;
+
+/** The GLiNER models in the Hugging Face cache: folders with a snapshot that has GLiNER's gliner_config.json. */
+function cachedGlinerModels() {
+  const hub = path.join(process.env.HF_HOME || path.join(os.homedir(), '.cache', 'huggingface'), 'hub');
+  const folders = fs.existsSync(hub) ? fs.readdirSync(hub) : [];
+  return folders.flatMap((folder) => {
+    const match = MODEL_CACHE_FOLDER.exec(folder);
+    const snapshots = path.join(hub, folder, 'snapshots');
+    if (!match || !fs.existsSync(snapshots)) return [];
+    const isGliner = fs.readdirSync(snapshots).some((id) => fs.existsSync(path.join(snapshots, id, 'gliner_config.json')));
+    return isGliner ? [`${match[1]}/${match[2]}`] : [];
+  }).sort();
+}
+
+// Offline (HF_HUB_OFFLINE, always in the desktop app) only the GLiNER models already on this computer can be loaded;
+// null: any model, downloaded the first time it is used.
+export const GLINER_MODELS = ON.test(process.env.HF_HUB_OFFLINE || '') ? cachedGlinerModels() : null;
+
 export const MAX_PDF_BYTES = 50 * 1024 * 1024;
 export const DOCUMENT_TIMEOUT_MS = 30 * 60 * 1000;
 // The Documents list (server/jobs.js): text files as the browser's text importer allows, at most this many

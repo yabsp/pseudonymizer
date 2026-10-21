@@ -1,4 +1,4 @@
-import { describeRuntime, detectWithGliner } from '../detection/gliner.js';
+import { DEFAULT_GLINER_MODEL, describeRuntime, detectWithGliner } from '../detection/gliner.js';
 import { listOllamaModels } from '../detection/ollama.js';
 import { callServer } from '../server-api.js';
 import { $, h, setStatus } from './dom.js';
@@ -27,17 +27,43 @@ const ABOUT_TIMEOUT_MS = 3000;
  */
 export async function limitToAvailableDetectors() {
   let available;
+  let glinerModels;
   try {
-    ({ detectors: available, app: appKind } = await callServer('api/about', { signal: AbortSignal.timeout(ABOUT_TIMEOUT_MS) }));
+    ({ detectors: available, app: appKind, glinerModels } = await callServer('api/about', { signal: AbortSignal.timeout(ABOUT_TIMEOUT_MS) }));
   } catch {
     return; // an older or unreachable server: keep every option, detection reports its own errors
   }
+  limitToInstalledModels(glinerModels);
   const select = $('detector');
   const saved = select.options[select.selectedIndex]?.text;
   for (const option of [...select.options]) if (!available.includes(option.value)) option.remove();
   if (select.value) return;
   select.value = 'gliner';
   setStatus('detectStatus', `"${saved}" is not available in this app, so GLiNER is used. You can change this under Settings.`, true);
+  scheduleSave();
+}
+
+/**
+ * Offline (always in the desktop app) only the GLiNER models on this computer can be loaded: the field offers
+ * those, can't be edited when there is only one, and a saved model that isn't there switches to one that is, and
+ * the user is told. models null (or missing, an older server): any model, downloaded on first use.
+ */
+function limitToInstalledModels(models) {
+  if (!Array.isArray(models)) return;
+  const input = $('glinerModel');
+  $('glinerModelList').replaceChildren(...models.map((name) => new Option(name, name)));
+  input.readOnly = models.length === 1;
+  const saved = input.value.trim() || DEFAULT_GLINER_MODEL;
+  if (models.includes(saved)) {
+    input.value = saved;
+    return;
+  }
+  if (!models.length) {
+    setStatus('glinerModelStatus', 'No GLiNER model is on this computer, and this app works offline.', true);
+    return;
+  }
+  input.value = models.includes(DEFAULT_GLINER_MODEL) ? DEFAULT_GLINER_MODEL : models[0];
+  setStatus('glinerModelStatus', `"${saved}" is not on this computer, and this app works offline, so "${input.value}" is used.`, true);
   scheduleSave();
 }
 

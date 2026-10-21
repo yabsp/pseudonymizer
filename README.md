@@ -52,8 +52,8 @@ window is in the background; they never contain file names, text or values. The 
 ### PDF documents
 Text, headings and tables are read on your computer, also from scanned pages. Images are never sent: each is
 replaced by a marker such as `[Image 1, page 2: not sent]`. The PDF file itself and its file name are never sent
-either. Formulas are marked at first; "Convert formulas" turns them into LaTeX (about 10 seconds each on a desktop
-processor, under a second with an NVIDIA graphics card).
+either. Formulas are marked at first; "Convert formulas" turns them into LaTeX (about 10 to 20 seconds each on a
+processor, a few seconds with an Intel graphics chip, under a second with an NVIDIA graphics card).
 
 ## Good to know
 - When the app starts, it gets detection ready in the background (about 10 seconds); the page says when it is
@@ -61,8 +61,7 @@ processor, under a second with an NVIDIA graphics card).
   processor, and less than a second per page with a usable graphics card.
 - Swiss towns are hidden also without a postal code ("aus Hochdorf"); a court's seat ("Bezirksgericht Hochdorf")
   stays readable unless the town also appears elsewhere in the text.
-- Presidio reads German, French and English; an Italian text is reported, as there is no Italian language model
-  for commercial use. Prompt changes are kept with "Save" in the Prompts tab.
+- Presidio reads German, French and English. Prompt changes are kept with "Save" in the Prompts tab.
 - Planned: reusable value lists.
 
 ## For developers and AI agents

@@ -9,11 +9,11 @@ need the app's `Origin` and the listed `Content-Type` (`rejectUnlessFromApp`). E
 
 | Route | Body / query | Answer |
 |---|---|---|
-| `GET /api/about` | | `{ app: "server" or "desktop", detectors: [...], documents: ["pdf"] or [] }` |
+| `GET /api/about` | | `{ app: "server" or "desktop", detectors: [...], documents: ["pdf"] or [], glinerModels }`; `glinerModels` is `null` (any model, downloaded on first use) or, offline, the GLiNER models in the Hugging Face cache |
 | `GET /api/settings`, `PUT /api/settings` | settings object (JSON) | settings; PUT answers `{ file }` |
 | `GET /api/adapters` | | `[{ id, label, models: [{ id, label }] }]` |
 | `POST /api/detect/gliner` | `{ text, labels, threshold, model, accelerator? }` | `{ entities: [{ text, label, start, end, score, source }], runtime }` |
-| `POST /api/detect/presidio` | the same plus `language` (`auto`, `de`, `fr`, `it`, `en`) | the same plus `language` used |
+| `POST /api/detect/presidio` | the same plus `language` (`auto`, `de`, `fr`, `en`) | the same plus `language` used; an Italian text is refused (502), as there is no Italian spaCy model for commercial use |
 | `POST /api/extract/pdf` | the PDF (`application/pdf`, max 50 MB); `?formulas=1`, `?accelerator=` | `{ markdown, pages, images, formulas, formulasConverted, tables, device, deviceNote? }` |
 | `POST /api/jobs?format=pdf\|text` | the file (`application/pdf`, or `application/octet-stream` for text); `&formulas=1`, `&accelerator=` | `201 { id, format, formulas, state, step, error }`; at most 50 documents and 500 MB waiting (429, 413) |
 | `GET /api/jobs` | | the list in that shape, never text; `state` `waiting`, `running`, `ready`, `failed`; `step` `{ number, of, label, seconds }` |
@@ -43,6 +43,7 @@ Read and validated in `server/config.js` only (except `desktop/main.js`, which s
 | `PSEUDONYMIZER_API_TOKEN` | set by the desktop app: a new random secret (64 hex digits) per start; every `/api/` request needs it in `X-Pseudonymizer-Token`, which Electron adds to the window's requests (the page never sees it); removed from the environment before helpers and CLIs start |
 | `DOCLING_ARTIFACTS_PATH` | Docling models, default `~/.cache/docling/models` (read by `python/document_extraction.py`) |
 | `PSEUDONYMIZER_CACHE` | exported ONNX models, default `~/.cache/pseudonymizer` or `%LOCALAPPDATA%\pseudonymizer` |
+| `HF_HUB_OFFLINE` | `1` (the desktop app sets it): only the GLiNER models already in the Hugging Face cache (`HF_HOME`) are offered and accepted; other model names are refused with 400 |
 | `GEMINI_API_KEY` | passed through to Gemini CLI; never stored by the app |
 
 ## Python helpers
@@ -116,8 +117,9 @@ sets the server's environment, imports `server/index.js`, waits for `listening`,
 `http://127.0.0.1:47291` (or a free port). Lock-down: no Node in the window, sandbox, no navigation away, no new
 windows, no permissions, spell checker off (it downloaded dictionaries from Google), every request not to
 localhost or 127.0.0.1 cancelled. Build: `desktop/build-helper.mjs` (PyInstaller, `--onedir`, with Docling, Presidio,
-spaCy and its de/fr/en models, never the Italian one; 3.3 GB from an environment with PyTorch's CUDA build via `HELPER_PYTHON`,
-`npm run dist:win:gpu`), `desktop/build-models.mjs` (copies GLiNER from the Hugging Face cache with links resolved,
+spaCy and its de/fr/en models; 3.3 GB from an environment with PyTorch's CUDA build via `HELPER_PYTHON`,
+`npm run dist:win:gpu`; on Windows the runtime hook `desktop/helper_dll_directory.py` puts `_internal` on PATH so
+PyTorch's XPU build finds the SYCL DLLs PyInstaller puts there), `desktop/build-models.mjs` (copies GLiNER from the Hugging Face cache with links resolved,
 1.1 GB, and the Docling models, 1.2 GB). Windows: a ZIP per variant instead of an NSIS installer, which
 can't hold more than 2 GiB; the app adds its own Start menu entry for notifications (ADR 0008),
 electron-builder (`package.json` `build`; only `prompts/*.default.*` are packed). Terminals inside VS Code set
@@ -150,5 +152,16 @@ telemetry module).
   API from a cold start: hardware check 3.3 s, loading and checking the model 6.9 s (16.7 s when it was loaded a
   second time for the check), a 4,775-character text 0.85 s (4.7 s before batching), with Presidio 3.9 s.
   `DETECTION_ACCELERATOR=torch-xpu npm run test:model` gives the same results as the CPU in 71 s (CPU 167 to 198 s).
-- Docling: 2 pages with a scanned page 16 to 25 s; about 70 to 90 s per formula with `--formulas`.
+- Docling: 2 pages with a scanned page 16 to 25 s; about 70 to 90 s per formula with `--formulas` (probably still
+  in bfloat16, before float32 on the CPU from ADR 0006; see the Core Ultra 7 258V below).
 - Presidio adds 0.1 to 0.5 s per text once its language model is loaded (2 to 3 s for the first text per language).
+
+## Measurements (Intel Core Ultra 7 258V, Arc 140V iGPU, Windows 11, 2026-10-21)
+`.venv` with PyTorch 2.14.1+xpu, mains power, synthetic data only.
+- GLiNER, a 4,860-character text with the 25 default labels: XPU loading and checking the model 7.4 s, detection
+  0.7 to 1.6 s (with Presidio 0.8 s, 7.8 s for the first text); CPU loading 4.5 s, detection 9.5 to 13.7 s (with
+  Presidio 10.6 s). So under a second per page on the iGPU, a few seconds per page on the processor.
+- Docling, a 2-page PDF with 6 formulas, one process per run including loading: without formulas CPU 28 s, XPU
+  30 s. With formulas CPU (float32) 150 s, about 20 s per formula; XPU with the bfloat16 preset 53 s (about 4 s per
+  formula), float16 50 s, float32 74 s. All gave the same LaTeX; float16 was not clearly faster than the preset in
+  one run, so the XPU keeps the preset (`formula_dtype`).

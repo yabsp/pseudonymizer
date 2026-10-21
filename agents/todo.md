@@ -1,7 +1,7 @@
 # To do
 
 Planned work, roughly in order. Each item lists what it is for, a first design and what must stay true for
-confidentiality (AGENTS.md, section 3). Decisions still open are marked as such.
+confidentiality (AGENTS.md, "Confidentiality invariants"). Decisions still open are marked as such.
 
 ## 1. Documents list: follow-ups
 The Documents tab (batch conversion with detection, docs/adr/0005-document-jobs-in-memory.md) and notifications
@@ -16,22 +16,22 @@ are done. Open:
 ## 2. GPU and NPU acceleration
 Done (2026-10-16): hardware check, the Hardware setting with "Automatic", PyTorch on CPU/CUDA/XPU/MPS and ONNX
 Runtime on CPU/CUDA/DirectML/CoreML for GLiNER, Docling on the matching device, and a check against the CPU before
-any GPU is used (see docs/setup.md, "Hardware acceleration", and reference.md). Tested on Linux with the CPU
-back ends only. Docling's formula model runs in float32 on the CPU and in float16 (bfloat16 from Ampere on) with
+any GPU is used (see docs/setup.md, "Hardware acceleration", and reference.md). Tested on the CPU back ends, on
+an Intel Arc iGPU (`torch-xpu`, Linux and Windows) and on an RTX 2070 (Windows, PDFs). Docling's formula model runs in float32 on the CPU and in float16 (bfloat16 from Ampere on) with
 batches of 32 on an NVIDIA GPU, measured on Windows with an RTX 2070 (ADR 0006).
 
 Still to do:
 - Test on the Dell XPS 15 (Windows): the hardware check, then DirectML (`onnxruntime-directml`) and, with an NVIDIA
   GPU, the CUDA build of PyTorch; run `DETECTION_ACCELERATOR=<id> npm run test:model` there.
-- Intel GPU on this laptop: detection works with the XPU build of PyTorch, now the laptop's `.venv` (2026-10-19,
-  see reference.md); the CPU build is kept in `.venv-cpu`, use `HELPER_PYTHON=.venv-cpu/bin/python` for local
-  desktop builds (docs/setup.md). PDFs run on `xpu` too (a synthetic page, 2026-10-19); speed not measured yet.
+- Intel GPU (Core Ultra 7 155H, Linux laptop): detection works with the XPU build of PyTorch, that laptop's
+  `.venv` (2026-10-19, see reference.md); the CPU build is kept in `.venv-cpu` there, use
+  `HELPER_PYTHON=.venv-cpu/bin/python` for a desktop build without it (docs/setup.md).
 - NPU (Intel Core Ultra): OpenVINO can't run GLiNER yet (dynamic shapes in its LSTM layer) and loads Intel's
   telemetry module. Revisit with a fixed-shape export, a newer OpenVINO, or ONNX Runtime's OpenVINO provider;
   the NPU also needs `intel-level-zero-npu` and `intel-driver-compiler-npu` on Linux.
-- Desktop app: ship GPU variants (CUDA, DirectML, Intel XPU) or let the user add them; today it bundles the CPU build.
-  A local Linux build from the XPU environment works (SYCL adapters bundled by `desktop/build-helper.mjs`, 5.7 GB
-  helper). Shipping it to others needs a licence review first: Intel's SYCL and compiler runtime are under the Intel
+- Desktop app: the CPU build and, on Windows, a CUDA variant (`npm run dist:win:gpu`) are built; DirectML and
+  Intel XPU are not shipped. Local builds from an XPU environment work on Linux and Windows (SYCL adapters bundled
+  by `desktop/build-helper.mjs`). Shipping it to others needs a licence review first: Intel's SYCL and compiler runtime are under the Intel
   Developer Tools EULA (redistribution only of files in a redist list, under terms forbidding reverse engineering;
   section 4.1 allows data collection, none seen under strace).
 - Thread count on hybrid CPUs (4 threads were 25% faster than 16 on the Core Ultra 7): measure once per machine.
@@ -54,31 +54,14 @@ patient. Today "Edit values" can save the list as JSON and load it again, but on
 ## Other open items
 - Desktop app speed (the model now loads at startup, with its steps shown): keep it loaded in the system tray
   after the window closes; an uncompressed Linux package (`.deb` or `.tar.gz`, the AppImage loads the model twice
-  as slowly); a tuned thread count (4 threads were 25% faster than 16 on this laptop). Waiting for a decision.
-- Formula conversion time: the UI and README say about 10 s per formula on a desktop processor (ADR 0006,
-  i9-9900K, float32), reference.md says 70 to 90 s on this laptop (probably measured before ADR 0006). Measure
-  again with a synthetic PDF with formulas, on the CPU and on the Arc iGPU, and correct whichever is wrong.
-- Pseudonymizing agentic CLIs (Codex, Claude Code, Gemini CLI) automatically: MCP can't do it (a tool server only
-  sees what the model chooses to send it, after the model already has the prompt). A local proxy could: all three
-  CLIs can send to another endpoint (Codex `model_providers.<id>.base_url` in `~/.codex/config.toml`, Claude Code
-  `ANTHROPIC_BASE_URL`, Gemini CLI `GOOGLE_GEMINI_BASE_URL`). Open decision, because it conflicts with
-  invariant 5 (the user reviews exactly what is sent) and needs: every request including file contents and tool
-  results pseudonymized, placeholders restored in streamed answers and tool calls, failing closed when detection
-  fails, a check per CLI whether a custom endpoint still works with the subscription login, and a security
-  review (ADR).
-- Remove the Italian spaCy model (`it_core_news_lg`, CC BY-NC-SA 3.0, non-commercial use only) before the app is
-  used commercially: drop `it` from `SPACY_MODELS` in `python/presidio_detection.py`,
-  uninstall it from `.venv`, update docs/setup.md, and decide whether Italian texts then use GLiNER alone (Presidio would report a
-  missing model) or another model with a commercial licence.
+  as slowly); a tuned thread count (4 threads were 25% faster than 16 on the Core Ultra 7). Waiting for a decision.
 - From the detection campaign: High sensitivity (0.3) as the default (9 instead of 15 leaks, 44 instead of 36 false
   hits on all documents); a never-sensitive list split into titles and other words, so names like "Mia" can be
   hidden on their own; re-reading only the area around underscores to cut the extra time.
 - From the tune-detection run (2026-10, docs/reports/tune-detection.md): GLiNER 0.4 leaks 471 -> 29 of 4102
   corpus values. Swiss towns standing alone are now found from the swisstopo register (GLiNER 0.4: 29 -> 25 dev leaks); towns outside Switzerland and names under 4 letters ("Brè") stay open. Open: company names
   GLiNER misses ("Saentis Mutual Health", "Seetal"), lower-case user names ("spm"), short initials outside a
-  name table ("NP", "SP"), seat and class numbers in exam documents; Presidio has no Italian spaCy model, so
-  GLiNER + Presidio fails on every Italian document (fail closed). Decide whether 0.3 becomes the default
+  name table ("NP", "SP"), seat and class numbers in exam documents. Decide whether 0.3 becomes the default
   (27 instead of 29 leaks, 113 instead of 91 over-redacted terms).
-- Windows installer: the helper and the unpacked app are built and tested on Windows; run the NSIS step
-  (`npm run dist:win`, electron-builder downloads its NSIS tools once) and test the installer; code signing
-  needs a decision.
+- Windows: the app ships as a ZIP because an NSIS installer can't hold more than 2 GiB (ADR 0008); an installer
+  with separate model packs, and code signing, need a decision before it goes to more users.

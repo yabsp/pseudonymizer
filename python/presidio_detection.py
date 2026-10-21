@@ -9,9 +9,13 @@ try:
 except ImportError as e:
     IMPORT_ERROR = f'Python package "presidio-analyzer" is not installed ({e}). See docs/setup.md, section "Detection with Presidio".'
 
-SPACY_MODELS = {'de': 'de_core_news_lg', 'fr': 'fr_core_news_lg', 'it': 'it_core_news_lg', 'en': 'en_core_web_lg'}
-LANGUAGE_NAMES = {'de': 'German', 'fr': 'French', 'it': 'Italian', 'en': 'English'}
+# The languages Presidio reads, each with a spaCy model whose licence allows commercial use (MIT, LGPL-LR).
+SPACY_MODELS = {'de': 'de_core_news_lg', 'fr': 'fr_core_news_lg', 'en': 'en_core_web_lg'}
+LANGUAGE_NAMES = {'de': 'German', 'fr': 'French', 'en': 'English'}
 FALLBACK_LANGUAGE = 'en'
+# Recognized only to refuse it: the Italian spaCy model is for non-commercial use, and reading an Italian text with
+# another language's model would miss names without anyone noticing (fail closed).
+REFUSED_LANGUAGE = 'it'
 
 # Presidio's e-mail recognizer looks up domains with tldextract, which downloads the public suffix list from
 # the internet; its URL recognizer cuts e-mail addresses into pieces ("lukas.st"). The app's patterns and
@@ -19,7 +23,7 @@ FALLBACK_LANGUAGE = 'en'
 REMOVED_ENTITIES = {'EMAIL_ADDRESS', 'URL'}
 
 # Short words that are frequent in one of the four languages and rare in the others; words shared by two
-# of them ("le", "in", "un", "si") are left out.
+# of them ("le", "in", "un", "si") are left out. Italian is among them only so it is recognized and refused.
 FREQUENT_WORDS = {
     'de': {'der', 'die', 'das', 'und', 'ist', 'nicht', 'mit', 'sich', 'des', 'dem', 'ein', 'eine', 'wir', 'ich', 'auf', 'für', 'bei', 'von', 'zu', 'wurde', 'vom', 'im', 'sehr', 'bitte'},
     'fr': {'les', 'et', 'est', 'des', 'une', 'du', 'que', 'qui', 'pour', 'dans', 'pas', 'vous', 'nous', 'au', 'aux', 'avec', 'sur', 'ce', 'votre', 'je'},
@@ -80,6 +84,8 @@ def detect_with_presidio(text, language, threshold):
     """Returns (language used, entities); language 'auto' is guessed from frequent words."""
     if language == 'auto':
         language = guess_language(text)
+    if language == REFUSED_LANGUAGE:
+        raise RuntimeError('Presidio does not read Italian texts. Choose "GLiNER" as the detection model in Settings for this text.')
     if language not in SPACY_MODELS:
         raise ValueError(f'unsupported language "{language}", expected one of {", ".join(SPACY_MODELS)} or auto')
     entities = []

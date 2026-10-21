@@ -1,7 +1,7 @@
 # Testing
 
 How to test changes, what the suites cover, and pitfalls of this environment. The rules for tests are in
-[AGENTS.md](../AGENTS.md), section 8.
+[AGENTS.md](../AGENTS.md), "Tests".
 
 ## Commands
 ```
@@ -30,16 +30,18 @@ out and only reported in totals. Synthetic documents only. The npm scripts run t
 
 Stand-ins: `tests/fixtures/fake_gliner/` (packages `gliner`, `presidio_analyzer`, `spacy` that find the strings in
 `FAKE_GLINER_ENTITIES` and `FAKE_PRESIDIO_ENTITIES`), `tests/fixtures/no_gliner/` (gliner fails to import),
-`tests/fixtures/fake-cli.mjs`, `tests/fixtures/fake-document-reader.mjs` (stands in for Python running
-`document_extraction.py`; "SLOW", "FAIL", "CRASH" in the PDF change its behaviour).
+`tests/fixtures/fake-cli.mjs`, `tests/fixtures/fake_document_extraction.py` (stands in for
+`document_extraction.py`, `FAKE_DOCUMENT_READER` in `tests/helpers/server.mjs`; "SLOW", "FAIL", "CRASH" in the
+PDF change its behaviour).
 
 ## Documents and baselines
 `tests/fixtures/documents.mjs` holds the synthetic documents with `mustHide` and `mustKeep`; it includes
 `tests/fixtures/generated-documents.mjs` (15 documents from the detection campaign). `knownMisses` and
 `knownChanges` per detector in `tests/model/detection-eval.test.mjs` are a measured baseline: update them only
-from an actual run. Last run (2026-10-16): 1246 tests, 1230 pass, 16 known. GLiNER misses "Peter", "Ruth" and
-"Scheidung_Wenger_Rosa"; Presidio misses the latter too and changes some kept text (lab values such as
-"Kreatinin", invoice terms, service names in logs, "Honda Civic", "Vorbezüge"). Identical with `onnx-cpu`.
+from an actual run. Last run (2026-10-21, Windows, `auto` = `torch-xpu` on an Arc 140V, 105 s): 1193 tests, 1183
+pass, 10 known. GLiNER misses "Scheidung_Wenger_Rosa" and changes "D&O insurance"; Presidio misses the former too
+and changes some kept text (lab values such as "Kreatinin", service names in logs, "Honda Civic", "Vorbezüge",
+"D&O insurance"). Fewer tests than before because Presidio no longer reads Italian (it refuses it instead).
 
 Five documents were written blind for the Presidio comparison, and the campaign wrote every batch before running a
 detector. Write new documents the same way, before looking at detector output, so fixes don't overfit.

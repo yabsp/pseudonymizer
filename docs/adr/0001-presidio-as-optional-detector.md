@@ -42,5 +42,7 @@ Memory: GLiNER alone about 2.8 GB, each loaded language about 0.7 GB more (about
   LGPL-LR, **`it_core_news_lg` CC BY-NC-SA 3.0 (non-commercial)**. Law firms and practices are commercial
   users, so the Italian model needs a decision before this detector is recommended for Italian texts
   (alternatives: spaCy's multilingual `xx_ent_wiki_sm`, licence still to be checked, or no Italian spaCy model).
+  Decided 2026-10-21: no Italian spaCy model. Presidio reads German, French and English and refuses an Italian
+  text (fail closed), which GLiNER alone reads.
 - A Python web backend is not part of this decision. It is worth revisiting together with PDF import, where
   Python's PDF and local OCR libraries help; the server tests would serve as its specification.

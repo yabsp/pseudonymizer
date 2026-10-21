@@ -28,6 +28,7 @@ describe('desktop app options', () => {
         DETECTION_HELPER: helper,
         PYTHONPATH: path.join(FIXTURES, 'fake_gliner'),
         FAKE_GLINER_ENTITIES: JSON.stringify({ 'Hans Muster': ['person', 0.95] }),
+        HF_HUB_OFFLINE: '',
       },
     });
   });
@@ -39,7 +40,7 @@ describe('desktop app options', () => {
 
   it('says it is the desktop app, with all detectors and PDFs', async () => {
     const res = await server.request({ path: '/api/about' });
-    assert.deepEqual(res.json(), { app: 'desktop', detectors: ['gliner', 'presidio', 'ollama'], documents: ['pdf'] });
+    assert.deepEqual(res.json(), { app: 'desktop', detectors: ['gliner', 'presidio', 'ollama'], documents: ['pdf'], glinerModels: null });
   });
 
   it('saves settings in the data folder, readable by the user only, not in the program folder', async () => {
@@ -60,12 +61,53 @@ describe('desktop app options', () => {
 
 describe('the server as started with "npm start"', () => {
   it('offers all three detectors', async () => {
-    const server = await startServer();
+    const server = await startServer({ env: { HF_HUB_OFFLINE: '' } });
     try {
-      assert.deepEqual((await server.request({ path: '/api/about' })).json(), { app: 'server', detectors: ['gliner', 'presidio', 'ollama'], documents: ['pdf'] });
+      assert.deepEqual((await server.request({ path: '/api/about' })).json(), { app: 'server', detectors: ['gliner', 'presidio', 'ollama'], documents: ['pdf'], glinerModels: null });
     } finally {
       await server.close();
     }
+  });
+});
+
+describe('offline, as in the desktop app', () => {
+  let hfHome;
+  let server;
+  before(async () => {
+    // A Hugging Face cache like the one the desktop app ships: GLiNER, the tokenizer it needs, and a half download.
+    hfHome = fs.mkdtempSync(path.join(os.tmpdir(), 'pseudo-hf-'));
+    const snapshot = (folder, file) => {
+      const dir = path.join(hfHome, 'hub', folder, 'snapshots', 'abc123');
+      fs.mkdirSync(dir, { recursive: true });
+      if (file) fs.writeFileSync(path.join(dir, file), '{}');
+    };
+    snapshot('models--urchade--gliner_multi_pii-v1', 'gliner_config.json');
+    snapshot('models--microsoft--mdeberta-v3-base', 'config.json');
+    snapshot('models--example--gliner_partial', null);
+    server = await startServer({
+      env: {
+        HF_HOME: hfHome,
+        HF_HUB_OFFLINE: '1',
+        PYTHONPATH: path.join(FIXTURES, 'fake_gliner'),
+        FAKE_GLINER_ENTITIES: JSON.stringify({ 'Hans Muster': ['person', 0.95] }),
+      },
+    });
+  });
+  after(async () => {
+    await server?.close();
+    fs.rmSync(hfHome, { recursive: true, force: true });
+  });
+
+  it('lists only the GLiNER models on this computer', async () => {
+    assert.deepEqual((await server.request({ path: '/api/about' })).json().glinerModels, [MODEL]);
+  });
+
+  it('refuses another model with a plain reason instead of trying to download it', async () => {
+    const res = await server.api('POST', '/api/detect/gliner', { text: 'Patient Hans Muster', labels: ['person'], threshold: 0.4, model: 'example/gliner_other' });
+    assert.equal(res.status, 400);
+    assert.match(res.json().error, /"example\/gliner_other" is not on this computer, and this app works offline\. Available: urchade\/gliner_multi_pii-v1\./);
+    const ok = await server.api('POST', '/api/detect/gliner', { text: 'Patient Hans Muster', labels: ['person'], threshold: 0.4, model: MODEL });
+    assert.equal(ok.status, 200, ok.body);
   });
 });
 

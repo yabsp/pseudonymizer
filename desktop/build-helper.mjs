@@ -42,14 +42,15 @@ function torchvisionLibraries() {
 }
 
 // PyTorch's XPU build (Intel GPUs) reaches the GPU through SYCL's adapters, which its loader opens by name at run
-// time, so PyInstaller can't see them either; without them the helper finds no Intel GPU. Linux only for now: the
-// XPU build on Windows names them differently and hasn't been built yet. Environments without them get nothing.
+// time, so PyInstaller can't see them either; without them the helper finds no Intel GPU. On Windows they are in
+// the environment's Library\bin, with the memory library they load (umf.dll). Environments without them get nothing.
 function syclAdapters() {
-  if (IS_WINDOWS) return [];
   const found = spawnSync(VENV_PYTHON, ['-c', 'import sys; print(sys.prefix)'], { encoding: 'utf8' });
-  const folder = path.join(found.stdout.trim(), 'lib');
-  // The names the loader opens: libur_adapter_level_zero.so.0, libur_adapter_level_zero_v2.so.0, libur_adapter_opencl.so.0
-  const ADAPTER = /^libur_adapter_\w+\.so\.0$/;
+  const folder = path.join(found.stdout.trim(), ...(IS_WINDOWS ? ['Library', 'bin'] : ['lib']));
+  // The names the loader opens. Linux: libur_adapter_level_zero.so.0, libur_adapter_level_zero_v2.so.0,
+  // libur_adapter_opencl.so.0. Windows: ur_adapter_level_zero.dll, ur_adapter_level_zero_v2.dll,
+  // ur_adapter_opencl.dll and umf.dll (not the debug builds, whose names end in "d": umfd.dll).
+  const ADAPTER = IS_WINDOWS ? /^(?:ur_adapter_\w+|umf)\.dll$/ : /^libur_adapter_\w+\.so\.0$/;
   if (!found.stdout.trim() || !fs.existsSync(folder)) return [];
   return fs.readdirSync(folder).filter((name) => ADAPTER.test(name))
     .flatMap((name) => ['--add-binary', `${path.join(folder, name)}${path.delimiter}.`]);
@@ -68,6 +69,7 @@ const args = [
   ...LEFT_OUT.flatMap((name) => ['--exclude-module', name]),
   ...torchvisionLibraries(),
   ...syclAdapters(),
+  '--runtime-hook', path.join(ROOT, 'desktop', 'helper_dll_directory.py'),
   path.join(ROOT, 'python', 'gliner_helper.py'),
 ];
 const result = spawnSync(VENV_PYTHON, args, { stdio: 'inherit', cwd: ROOT });

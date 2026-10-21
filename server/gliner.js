@@ -1,10 +1,10 @@
 import { spawn } from 'node:child_process';
-import { HELPER_COMMAND } from './config.js';
+import { GLINER_MODELS, HELPER_COMMAND } from './config.js';
 import { readBody, rejectUnlessFromApp, send } from './http.js';
 
 // Hugging Face model ids: "owner/name", each part letters, digits, "_", "." or "-" (e.g. "urchade/gliner_multi_pii-v1").
 const MODEL_ID = /^[\w.-]+\/[\w.-]+$/;
-const LANGUAGES = ['auto', 'de', 'fr', 'it', 'en'];
+const LANGUAGES = ['auto', 'de', 'fr', 'en'];
 // The hardware choices of python/accelerators.py: "auto", PyTorch on cpu, cuda, xpu or mps, or ONNX Runtime on
 // cpu, cuda, directml or coreml ("torch-cuda", "onnx-directml").
 export const ACCELERATOR = /^(?:auto|torch-(?:cpu|cuda|xpu|mps)|onnx-(?:cpu|cuda|directml|coreml))$/;
@@ -72,6 +72,9 @@ async function handleDetection(req, res, engine) {
     return send(res, 400, { error: e.message });
   }
   if (!MODEL_ID.test(params.model || '')) return send(res, 400, { error: 'Invalid GLiNER model name, expected e.g. "urchade/gliner_multi_pii-v1".' });
+  if (GLINER_MODELS && !GLINER_MODELS.includes(params.model)) {
+    return send(res, 400, { error: `"${params.model}" is not on this computer, and this app works offline. Available: ${GLINER_MODELS.join(', ') || 'none'}.` });
+  }
   if (!ACCELERATOR.test(params.accelerator ?? 'auto')) return send(res, 400, { error: 'Invalid hardware choice.' });
   const language = params.language ?? 'auto';
   if (engine === 'presidio' && !LANGUAGES.includes(language)) return send(res, 400, { error: `Invalid language, expected one of ${LANGUAGES.join(', ')}.` });

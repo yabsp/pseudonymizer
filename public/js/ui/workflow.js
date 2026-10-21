@@ -185,7 +185,7 @@ function showDocument() {
   $('documentFacts').textContent = facts.filter(Boolean).join(' · ');
   const hasUnconverted = doc.formulas > 0 && !doc.formulasConverted;
   $('formulaNotice').hidden = !hasUnconverted;
-  if (hasUnconverted) $('formulaText').textContent = `${plural(doc.formulas, 'formula is', 'formulas are')} marked but not sent. Converting them to LaTeX takes about 10 seconds each, less with a graphics card.`;
+  if (hasUnconverted) $('formulaText').textContent = `${plural(doc.formulas, 'formula is', 'formulas are')} marked but not sent. Converting them to LaTeX takes about 10 to 20 seconds each, less with a graphics card.`;
   $('documentText').textContent = doc.markdown;
 }
 

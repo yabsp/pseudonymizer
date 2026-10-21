@@ -13,5 +13,5 @@ Read in this order:
 
 Decisions are recorded in [docs/adr/](../docs/adr/).
 
-Keep these files current in the same change that makes them outdated (AGENTS.md, section 17). User-facing text
+Keep these files current in the same change that makes them outdated (AGENTS.md, "Documentation"). User-facing text
 (what the app does, how to install and use it) belongs in the README or docs/setup.md, everything technical here.

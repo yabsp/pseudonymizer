@@ -83,12 +83,13 @@ AI tool the user has installed and logged in to.
   `ui/theme.js` switches between System, Light and Dark.
 - **Server** (`server/`): Node built-ins only. Configuration in `config.js`, routes in `index.js`,
   one module per feature (`gliner.js` serves `POST /api/detect/gliner` and `POST /api/detect/presidio`,
-  which also takes `language`: `auto`, `de`, `fr`, `it` or `en`). Every API request must come from the app itself (Host, Origin and
+  which also takes `language`: `auto`, `de`, `fr` or `en`; an Italian text is refused). Every API request must come from the app itself (Host, Origin and
   Content-Type checks in `http.js`).
 - **Python helper** (`python/gliner_helper.py`): reads one JSON request per line on stdin, writes one JSON
   answer per line on stdout, matched by `id`:
-  `{"id", "text", "labels", "threshold", "model", "engine", "language"}` ->
-  `{"id", "entities": [{"text", "label", "start", "end", "score", "source"}], "language"}` or `{"id", "error"}`.
+  `{"id", "text", "labels", "threshold", "model", "engine", "language", "accelerator"}` ->
+  `{"id", "entities": [{"text", "label", "start", "end", "score", "source"}], "language", "runtime"}` or
+  `{"id", "error"}`; `{"id", "probe": true}` answers the hardware check (see reference.md).
   GLiNER reads the text in windows of 150 words, several per call on a GPU; windows with underscores inside words
   ("Vertrag_Mueller.pdf") are read a second time with spaces instead, so names in file names are found.
   `engine` is `gliner` (default) or `presidio`, which adds Presidio's values (`source: "presidio"`, `label` a
@@ -103,8 +104,10 @@ found when the app is started from the desktop), sets the server's environment (
 offline model folder), imports the unchanged `server/index.js` and waits for `listening`, then opens a window on
 `http://127.0.0.1:<port>` (port 47291, or a free one). The window has no Node access, can't navigate away or
 open new windows, gets no permission except notifications (shown natively, with the app id set on Windows), and every request that doesn't go to this machine is cancelled.
-The installer carries the app code in `app.asar`, the helper built by PyInstaller in `resources/helper` and
-the model in `resources/models`. See `docs/adr/0003-desktop-app-electron.md`.
+The package (an AppImage on Linux, a ZIP on Windows, ADR 0008) carries the app code in `app.asar`, the helper
+built by PyInstaller (GLiNER, Presidio, Docling) in `resources/helper` and the models in `resources/models`. It
+works offline, so only the GLiNER models it ships can be chosen (`GLINER_MODELS` in `server/config.js`). See
+`docs/adr/0003-desktop-app-electron.md`.
 
 ## Hardware
 `python/accelerators.py` probes the machine (operating system, processor, memory, graphics adapters through
@@ -125,4 +128,3 @@ the same values as the CPU; if not, the CPU is used and the answer's `runtime.no
 ## Not enabled yet
 - Direct API providers (Anthropic, OpenAI-compatible, Gemini) are parked in `parked/api-targets/` until
   they are tested.
-- PDF import in the desktop app (Docling is not bundled yet).
