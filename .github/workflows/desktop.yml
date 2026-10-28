@@ -87,6 +87,13 @@ jobs:
         with:
           path: models
           key: models-${{ runner.os }}-${{ env.MODELS_KEY }}
+      # pip's downloads (PyTorch alone is about 2.5 GB with CUDA), which npm run setup keeps in .cache/pip; a new key
+      # when the requirements or the pinned versions in the setup change, starting from the last cache.
+      - uses: actions/cache@v4
+        with:
+          path: .cache/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('python/requirements.txt', 'scripts/setup.mjs') }}
+          restore-keys: pip-${{ runner.os }}-
       # Before the setup, so setup-node's npm cache is used; the setup then skips this step.
       - run: npm ci
       # .venv with PyTorch (CPU on Linux, CUDA on Windows), the requirements, PyInstaller and the spaCy models,
