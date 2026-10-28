@@ -29,9 +29,10 @@ Still to do:
 - NPU (Intel Core Ultra): OpenVINO can't run GLiNER yet (dynamic shapes in its LSTM layer) and loads Intel's
   telemetry module. Revisit with a fixed-shape export, a newer OpenVINO, or ONNX Runtime's OpenVINO provider;
   the NPU also needs `intel-level-zero-npu` and `intel-driver-compiler-npu` on Linux.
-- Desktop app: the CPU build and, on Windows, a CUDA variant (`npm run dist:win:gpu`) are built; DirectML and
-  Intel XPU are not shipped. Local builds from an XPU environment work on Linux and Windows (SYCL adapters bundled
-  by `desktop/build-helper.mjs`). Shipping it to others needs a licence review first: Intel's SYCL and compiler runtime are under the Intel
+- Desktop app: Linux ships the CPU build, Windows only the CUDA build (`npm run dist:win`, which runs on the
+  processor without an NVIDIA GPU); DirectML and Intel XPU are not shipped. Local builds from an XPU environment
+  work on Linux and Windows (SYCL adapters bundled by `desktop/build-helper.mjs`; on Windows `npm run dist:win`
+  names that ZIP `-XPU`). Shipping it to others needs a licence review first: Intel's SYCL and compiler runtime are under the Intel
   Developer Tools EULA (redistribution only of files in a redist list, under terms forbidding reverse engineering;
   section 4.1 allows data collection, none seen under strace).
 - Thread count on hybrid CPUs (4 threads were 25% faster than 16 on the Core Ultra 7): measure once per machine.

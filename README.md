@@ -17,9 +17,9 @@ Pseudonymization is only as good as detection: always look at the highlighted pr
 **Desktop app** (Linux, Windows): download it, start it, done. It brings everything it needs, also for PDFs.
 - Linux: make `Pseudonymizer-<version>-x86_64.AppImage` executable (right click > Properties > "Allow executing",
   or `chmod +x`) and start it.
-- Windows: unpack `Pseudonymizer-<version>-win-x64.zip` into a folder of your choice (about 5.3 GB) and start
-  `Pseudonymizer.exe`. With an NVIDIA graphics card, take the `-GPU` version instead (about 7.6 GB, much faster for
-  PDFs with formulas). Without a code signature, Windows shows a warning ("More info" > "Run anyway"). On the
+- Windows: unpack `Pseudonymizer-<version>-win-x64.zip` into a folder of your choice (about 7.6 GB) and start
+  `Pseudonymizer.exe`. It uses an NVIDIA graphics card if your computer has one (much faster for PDFs with
+  formulas) and the processor otherwise. Without a code signature, Windows shows a warning ("More info" > "Run anyway"). On the
   first start the app adds itself to the Start menu, which Windows needs for its notifications. To remove it,
   delete the folder and the Start menu entry.
 

@@ -1,20 +1,16 @@
-# Tests, then builds the desktop app: Linux (AppImage), Windows (ZIP) and, when asked, Windows with PyTorch's
-# CUDA build (ZIP, -GPU). Runs on version tags (v*) and by hand (Actions > Desktop app > Run workflow).
+# Tests, then builds the desktop app: Linux (AppImage, CPU build of PyTorch) and Windows (ZIP, CUDA build of PyTorch,
+# which uses an NVIDIA GPU when there is one and the processor otherwise). Runs on version tags (v*) and by hand
+# (Actions > Desktop app > Run workflow).
 #
 # The results are workflow artifacts, not release files: a GitHub release file can be at most 2 GiB, and the
-# builds are 2.3 to 4 GB (docs/adr/0008-desktop-packaging.md). Only synthetic data is used; the models are
-# downloaded from Hugging Face and cached between runs.
+# builds are 2.3 to 6 GB (docs/adr/0008-desktop-packaging.md). Only synthetic data is used. The build environment
+# comes from npm run setup (scripts/setup.mjs); the models are downloaded from Hugging Face and cached between runs.
 name: Desktop app
 
 on:
   push:
     tags: ['v*']
   workflow_dispatch:
-    inputs:
-      gpu:
-        description: Also build the Windows GPU variant (about 25 minutes more, 4 GB)
-        type: boolean
-        default: false
 
 permissions:
   contents: read
@@ -22,10 +18,6 @@ permissions:
 env:
   NODE_VERSION: '24'
   PYTHON_VERSION: '3.12'
-  # The PyTorch builds the app is tested with (docs/setup.md); the CPU build keeps the app small.
-  TORCH: torch==2.14.1 torchvision==0.29.1
-  TORCH_CPU_INDEX: https://download.pytorch.org/whl/cpu
-  TORCH_CUDA_INDEX: https://download.pytorch.org/whl/cu130
   # The models build-models.mjs ships; the cache key changes when this list does.
   MODELS_KEY: gliner_multi_pii-v1+mdeberta-v3-base+docling-layout-tableformer-code_formula-rapidocr-de
   HF_HUB_DISABLE_TELEMETRY: '1'
@@ -63,14 +55,17 @@ jobs:
         include:
           - name: Linux
             os: ubuntu-latest
-            dist: dist:linux
+            # The CPU build of PyTorch keeps the Linux app small.
+            setup: npm run setup
+            dist: npm run dist:linux -- --publish never
             files: dist/*.AppImage
           - name: Windows
             os: windows-latest
-            dist: dist:win
+            setup: npm run setup -- --torch cuda
+            dist: npm run dist:win
             files: dist/*.zip
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 120
+    timeout-minutes: 150
     defaults:
       run:
         shell: bash
@@ -86,69 +81,23 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-          cache: pip
-          cache-dependency-path: python/requirements.txt
-      - name: Python environment (.venv) with the CPU build of PyTorch
-        run: |
-          python -m venv .venv
-          VENV_PYTHON=$([ "$RUNNER_OS" = Windows ] && echo .venv/Scripts/python.exe || echo .venv/bin/python)
-          echo "VENV_PYTHON=$VENV_PYTHON" >> "$GITHUB_ENV"
-          $VENV_PYTHON -m pip install --upgrade pip
-          $VENV_PYTHON -m pip install $TORCH --index-url $TORCH_CPU_INDEX
-          $VENV_PYTHON -m pip install -r python/requirements.txt pyinstaller
-          # The spaCy models the app ships for Presidio (MIT, LGPL-LR); never the Italian one (non-commercial).
-          $VENV_PYTHON -m spacy download de_core_news_lg
-          $VENV_PYTHON -m spacy download fr_core_news_lg
-          $VENV_PYTHON -m spacy download en_core_web_lg
-      - uses: ./.github/actions/models
+      # The models npm run setup puts in models/ (GLiNER with its tokenizer, Docling's layout, table, formula and
+      # OCR models); with the cache restored, the setup skips their download.
+      - uses: actions/cache@v4
+        with:
+          path: models
+          key: models-${{ runner.os }}-${{ env.MODELS_KEY }}
+      # Before the setup, so setup-node's npm cache is used; the setup then skips this step.
       - run: npm ci
+      # .venv with PyTorch (CPU on Linux, CUDA on Windows), the requirements, PyInstaller and the spaCy models,
+      # and the models in models/ (docs/setup.md, "Quick setup").
+      - name: Setup
+        run: ${{ matrix.setup }}
       - name: Build
-        run: npm run ${{ matrix.dist }} -- --publish never
+        run: ${{ matrix.dist }}
       - uses: actions/upload-artifact@v4
         with:
           name: pseudonymizer-${{ github.ref_name }}-${{ matrix.name }}
           path: ${{ matrix.files }}
-          compression-level: 0
-          retention-days: 30
-
-  build-gpu:
-    name: Build Windows GPU
-    needs: test
-    if: github.event_name == 'workflow_dispatch' && inputs.gpu
-    runs-on: windows-latest
-    timeout-minutes: 150
-    defaults:
-      run:
-        shell: bash
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-      # .venv (CPU) only downloads the Docling models; the helper is built from .venv-gpu (HELPER_PYTHON).
-      - name: Python environments with the CPU and the CUDA build of PyTorch
-        run: |
-          python -m venv .venv
-          python -m venv .venv-gpu
-          echo "VENV_PYTHON=.venv/Scripts/python.exe" >> "$GITHUB_ENV"
-          .venv/Scripts/python.exe -m pip install $TORCH --index-url $TORCH_CPU_INDEX
-          .venv/Scripts/python.exe -m pip install -r python/requirements.txt
-          .venv-gpu/Scripts/python.exe -m pip install $TORCH --index-url $TORCH_CUDA_INDEX
-          .venv-gpu/Scripts/python.exe -m pip install -r python/requirements.txt pyinstaller
-          for model in de_core_news_lg fr_core_news_lg en_core_web_lg; do .venv-gpu/Scripts/python.exe -m spacy download $model; done
-      - uses: ./.github/actions/models
-      - run: npm ci
-      - name: Build
-        env:
-          HELPER_PYTHON: .venv-gpu/Scripts/python.exe
-        run: npm run dist:win:gpu
-      - uses: actions/upload-artifact@v4
-        with:
-          name: pseudonymizer-${{ github.ref_name }}-Windows-GPU
-          path: dist/*-GPU.zip
           compression-level: 0
           retention-days: 30

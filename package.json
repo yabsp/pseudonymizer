@@ -8,6 +8,7 @@
     "node": ">=22"
   },
   "scripts": {
+    "setup": "node scripts/setup.mjs",
     "start": "node server",
     "test": "node --test \"tests/**/*.test.mjs\"",
     "test:strict": "node scripts/test.mjs --strict",
@@ -18,8 +19,7 @@
     "build:helper": "node desktop/build-helper.mjs",
     "build:models": "node desktop/build-models.mjs",
     "dist:linux": "npm run build:helper && npm run build:models && electron-builder --linux AppImage",
-    "dist:win": "npm run build:helper && npm run build:models && electron-builder --win zip",
-    "dist:win:gpu": "node desktop/dist-gpu.mjs"
+    "dist:win": "node desktop/dist-win.mjs"
   },
   "devDependencies": {
     "electron": "44.8.0",

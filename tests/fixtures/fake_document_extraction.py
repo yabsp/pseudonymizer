@@ -1,7 +1,8 @@
 """Stands in for python/document_extraction.py in the server tests' copy of the project, so they run without
 Docling: argv is [file, --accelerator, id, --formulas?]. Writes the path of the file it was given to FAKE_DOC_LOG, so tests can check
 it is deleted afterwards. A PDF containing "SLOW" makes it wait (to test cancelling), "FAIL" makes it answer with
-an error, "CRASH" makes it exit without an answer."""
+an error, "CRASH" makes it exit without an answer, "ENV" makes it answer with the model folders it was given
+(HF_HOME and DOCLING_ARTIFACTS_PATH, one per line, empty if unset)."""
 import json
 import os
 import sys
@@ -19,7 +20,10 @@ if 'CRASH' in content:
     sys.exit(3)
 if 'SLOW' in content:
     time.sleep(60)
-if 'FAIL' in content:
+if 'ENV' in content:
+    folders = [os.environ.get('HF_HOME', ''), os.environ.get('DOCLING_ARTIFACTS_PATH', '')]
+    print(json.dumps({'markdown': '\n'.join(folders), 'pages': 1, 'images': 0, 'formulas': 0, 'formulasConverted': False, 'tables': 0, 'device': 'cpu'}))
+elif 'FAIL' in content:
     print(json.dumps({'error': 'RuntimeError: broken PDF'}))
 else:
     formula = '$$E = mc^2$$' if formulas else '[Formula 1, page 1: not converted]'

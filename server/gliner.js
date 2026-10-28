@@ -12,7 +12,7 @@ export const ACCELERATOR = /^(?:auto|torch-(?:cpu|cuda|xpu|mps)|onnx-(?:cpu|cuda
 let helper = null;
 
 function startHelper() {
-  const child = spawn(HELPER_COMMAND.command, HELPER_COMMAND.args, { cwd: HELPER_COMMAND.cwd });
+  const child = spawn(HELPER_COMMAND.command, HELPER_COMMAND.args, { cwd: HELPER_COMMAND.cwd, env: HELPER_COMMAND.env });
   const state = { child, pending: new Map(), nextId: 1 };
   let unreadOutput = '';
   let recentErrors = '';

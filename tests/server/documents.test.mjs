@@ -87,3 +87,43 @@ describe('PDF extraction endpoint', () => {
     assert.ok(!fs.existsSync(file), 'temporary copy deleted after cancelling');
   });
 });
+
+describe('model folders of the helpers', () => {
+  const PDF_ASKING_FOR_FOLDERS = pdf('ENV');
+  const foldersSeen = async (server) => {
+    const res = await server.request({
+      method: 'POST', path: '/api/extract/pdf', body: PDF_ASKING_FOR_FOLDERS,
+      headers: { Origin: server.origin, 'Content-Type': 'application/pdf' },
+    });
+    assert.equal(res.status, 200, res.body);
+    return res.json().markdown.split('\n');
+  };
+  // As "npm run setup" leaves them in the project folder.
+  const PROJECT_MODELS = { 'models/huggingface/hub/.keep': '', 'models/docling/.keep': '', ...FAKE_DOCUMENT_READER };
+
+  it('uses the models in the project folder when no other folder is set', async () => {
+    const server = await startServer({ env: { HF_HOME: '', DOCLING_ARTIFACTS_PATH: '' }, files: PROJECT_MODELS });
+    try {
+      const [hfHome, docling] = await foldersSeen(server);
+      assert.ok(hfHome.endsWith(path.join('models', 'huggingface')), hfHome);
+      assert.ok(docling.endsWith(path.join('models', 'docling')), docling);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('keeps folders that are set, and the libraries\' own without a models folder', async () => {
+    const set = await startServer({ env: { HF_HOME: '/srv/hf', DOCLING_ARTIFACTS_PATH: '/srv/docling' }, files: PROJECT_MODELS });
+    try {
+      assert.deepEqual(await foldersSeen(set), ['/srv/hf', '/srv/docling']);
+    } finally {
+      await set.close();
+    }
+    const none = await startServer({ env: { HF_HOME: '', DOCLING_ARTIFACTS_PATH: '' }, files: FAKE_DOCUMENT_READER });
+    try {
+      assert.deepEqual(await foldersSeen(none), ['', '']);
+    } finally {
+      await none.close();
+    }
+  });
+});

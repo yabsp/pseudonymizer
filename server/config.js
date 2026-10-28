@@ -28,17 +28,30 @@ const venvPython = path.join(ROOT, '.venv', process.platform === 'win32' ? 'Scri
 const systemPython = process.platform === 'win32' ? 'python' : 'python3';
 export const GLINER_PYTHON = process.env.GLINER_PYTHON || (fs.existsSync(venvPython) ? venvPython : systemPython);
 
+// The models "npm run setup" downloads into the project folder; used when HF_HOME or DOCLING_ARTIFACTS_PATH is not
+// set and the folder exists, otherwise the libraries' own caches in the home folder.
+export const PROJECT_MODELS_DIR = path.join(ROOT, 'models');
+const projectModels = (name) => (fs.existsSync(path.join(PROJECT_MODELS_DIR, name)) ? path.join(PROJECT_MODELS_DIR, name) : null);
+const hfHome = process.env.HF_HOME || projectModels('huggingface');
+const doclingArtifacts = process.env.DOCLING_ARTIFACTS_PATH || projectModels('docling');
+// The environment of the helpers: the server's, with the model folders above.
+const helperEnv = {
+  ...process.env,
+  ...(hfHome ? { HF_HOME: hfHome } : {}),
+  ...(doclingArtifacts ? { DOCLING_ARTIFACTS_PATH: doclingArtifacts } : {}),
+};
+
 // The desktop app ships the helper as one program (PyInstaller), started without Python or a script argument.
 const bundledHelper = process.env.DETECTION_HELPER;
 if (bundledHelper && !fs.existsSync(bundledHelper)) throw new Error(`DETECTION_HELPER points to "${bundledHelper}", which does not exist.`);
 // cwd: the bundled helper runs in its own folder, since the desktop app's ROOT is inside an archive (app.asar).
 export const HELPER_COMMAND = bundledHelper
-  ? { command: bundledHelper, args: [], cwd: path.dirname(bundledHelper) }
-  : { command: GLINER_PYTHON, args: [GLINER_HELPER], cwd: ROOT };
+  ? { command: bundledHelper, args: [], cwd: path.dirname(bundledHelper), env: helperEnv }
+  : { command: GLINER_PYTHON, args: [GLINER_HELPER], cwd: ROOT, env: helperEnv };
 // The same bundled program extracts documents when started with --extract-document.
 export const DOCUMENT_COMMAND = bundledHelper
-  ? { command: bundledHelper, args: ['--extract-document'], cwd: path.dirname(bundledHelper) }
-  : { command: GLINER_PYTHON, args: [DOCUMENT_EXTRACTOR], cwd: ROOT };
+  ? { command: bundledHelper, args: ['--extract-document'], cwd: path.dirname(bundledHelper), env: helperEnv }
+  : { command: GLINER_PYTHON, args: [DOCUMENT_EXTRACTOR], cwd: ROOT, env: helperEnv };
 // Hugging Face's cache folder for the model "owner/name": "models--owner--name" (each part letters, digits, "_", "." or "-").
 const MODEL_CACHE_FOLDER = /^models--([\w.-]+?)--([\w.-]+)$/;
 // The values Hugging Face accepts for HF_HUB_OFFLINE as "on".
@@ -46,7 +59,7 @@ const ON = /^(?:1|true|yes|on)$/i;
 
 /** The GLiNER models in the Hugging Face cache: folders with a snapshot that has GLiNER's gliner_config.json. */
 function cachedGlinerModels() {
-  const hub = path.join(process.env.HF_HOME || path.join(os.homedir(), '.cache', 'huggingface'), 'hub');
+  const hub = path.join(hfHome || path.join(os.homedir(), '.cache', 'huggingface'), 'hub');
   const folders = fs.existsSync(hub) ? fs.readdirSync(hub) : [];
   return folders.flatMap((folder) => {
     const match = MODEL_CACHE_FOLDER.exec(folder);

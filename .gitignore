@@ -9,6 +9,9 @@ prompts/*.txt
 .venv/
 .venv-*/
 __pycache__/
+# Models and download caches from "npm run setup"
+models/
+.cache/
 
 # other
 .claude

@@ -13,6 +13,41 @@ npm start
 ```
 Open http://localhost:8091 (another port: `PORT=9000 npm start`). No `npm install` is needed for this.
 
+## Quick setup
+One command installs everything below that the app and the desktop build need, all inside the project folder:
+```
+npm run setup
+```
+It needs Node.js and Python 3.12 (on Windows from python.org, with the `py` launcher) and downloads about 6 GB.
+What it puts where:
+
+| What | Where |
+|---|---|
+| Python environment: PyTorch, `python/requirements.txt` (GLiNER, Presidio, Docling, ONNX Runtime), PyInstaller, spaCy's German, French and English models | `.venv` |
+| GLiNER model and its tokenizer (1.1 GB) | `models/huggingface` |
+| Docling's models for PDFs (1.2 GB) | `models/docling` |
+| Electron and electron-builder, for the desktop build | `node_modules` |
+| Download caches of pip, npm and Electron | `.cache` |
+
+The app and the desktop build use `models/` automatically when it exists (unless `HF_HOME` or
+`DOCLING_ARTIFACTS_PATH` is set); without it they use the libraries' caches in your home folder, as below. Steps that
+are done already are skipped, so after a failed download just run it again. To start over, delete `.venv`,
+`models` and `.cache`.
+
+Options:
+- `--torch cpu` (default), `cuda` (NVIDIA) or `xpu` (Intel Arc and Core Ultra graphics): which build of PyTorch.
+- `--venv .venv-<name>`: another environment, e.g. for building the desktop app with a GPU build while `.venv`
+  keeps the CPU build for development and tests. The models in `models/` are shared.
+
+```
+npm run setup                                         # development: .venv with the CPU build
+npm run setup -- --torch cuda --venv .venv-cuda       # for the Windows app with NVIDIA support
+npm run setup -- --torch xpu --venv .venv-xpu         # for an app for your own Intel GPU
+```
+An environment already holding another PyTorch build is not changed; the setup stops and asks for another `--venv`.
+Not covered: Ollama and the AI tools (below), and the ONNX Runtime packages for DirectML or NVIDIA (see "Hardware
+acceleration"). The sections below do the same steps by hand.
+
 ## Detection with GLiNER
 GLiNER is the base of both detectors: a small model that finds names, companies, addresses, IDs and similar. Install it
 once into `.venv` in the project folder (about 1.2 GB):
@@ -88,37 +123,49 @@ The pseudonymized text is sent through an AI tool installed on your computer, lo
 Usage counts against your plan's limits.
 
 ## Build the desktop app
-Needs the setup above (with the model downloaded once by running a detection):
+Needs the setup above; `npm run setup` does all of it (by hand: `npm install` for Electron and electron-builder,
+PyInstaller in the Python environment, and the GLiNER and Docling models downloaded once):
 ```
-npm install                          # Electron and electron-builder, build tools only
-.venv/bin/python -m pip install pyinstaller
 npm run desktop                      # try it from the project folder
 npm run dist:linux                   # dist/Pseudonymizer-<version>-x86_64.AppImage
-npm run dist:win                     # on Windows: dist/Pseudonymizer-<version>-win-x64.zip
-npm run dist:win:gpu                 # the same with PyTorch's CUDA build, see below
+npm run dist:win                     # on Windows, see below
 ```
-Build each system's version on that system. The Docling models must be downloaded first (see "Opening PDF
-documents"); they ship with the app. Windows gets a ZIP instead of an installer: the app is larger than the 2 GB
-an NSIS installer can hold (docs/adr/0008-desktop-packaging.md). For the GPU variant, set `HELPER_PYTHON` to the
-`python.exe` of a separate environment with the CUDA build of PyTorch, the requirements and PyInstaller.
+Build each system's version on that system. The models ship with the app, taken from `models/` (or from
+`HF_HOME`, `DOCLING_ARTIFACTS_PATH` or the caches in your home folder). Windows gets a ZIP instead of an installer:
+the app is larger than the 2 GB an NSIS installer can hold (docs/adr/0008-desktop-packaging.md).
 
-The build takes PyTorch from the environment it is built from, so the app only uses the GPU that environment's
-PyTorch supports. For an Intel GPU (Linux or Windows), build from an environment with PyTorch's XPU build (see
-"Hardware acceleration"), with the requirements, the spaCy models and PyInstaller in it:
+The build takes PyTorch from the environment it is built from (`HELPER_PYTHON`, else `.venv`), so the app only
+uses the GPU that environment's PyTorch supports. Keep `.venv` on the CPU build for development and tests, and
+make a second environment for the build.
+
+### Windows
+`npm run dist:win` needs a GPU build of PyTorch and stops otherwise. Both run on the processor on computers without
+that GPU.
+
+| Build | Set up with | Result |
+|---|---|---|
+| NVIDIA (CUDA), the one to pass on | `npm run setup -- --torch cuda --venv .venv-cuda` | `dist/Pseudonymizer-<version>-win-x64.zip`, about 7.6 GB unpacked |
+| Intel Arc and Core Ultra graphics (XPU), for your own computer | `npm run setup -- --torch xpu --venv .venv-xpu` | `dist/Pseudonymizer-<version>-win-x64-XPU.zip`, about 5 GB unpacked |
+
+Then build with `HELPER_PYTHON` set to that environment's Python:
 ```
-npm run dist:linux    # with the XPU build in .venv; another environment: HELPER_PYTHON=<its python> npm run dist:linux
-npm run dist:win      # Windows, the same
+$env:HELPER_PYTHON = '.venv-cuda\Scripts\python.exe'; npm run dist:win      # PowerShell
+HELPER_PYTHON=.venv-cuda/Scripts/python.exe npm run dist:win                 # Git Bash
 ```
-The app then finds the Intel GPU (Settings > Detection > Advanced > "This computer"); it is about 5 GB, and it
-needs Intel's GPU drivers on the computer it runs on. Keep it for your own computer: Intel's GPU libraries in it
-may not be passed on as they are (see agents/todo.md). If `.venv` has the XPU build and you want the normal app,
-build it from an environment with the CPU build, e.g. `HELPER_PYTHON=.venv-cpu/bin/python npm run dist:linux`.
+The XPU app needs Intel's GPU drivers on the computer it runs on and finds the GPU under Settings > Detection >
+Advanced > "This computer". Keep it for your own computer: Intel's GPU libraries in it may not be passed on as they
+are (see agents/todo.md).
+
+### Linux
+`npm run dist:linux` builds with whatever PyTorch the environment has; the AppImage that is passed on uses the
+CPU build (`.venv` from `npm run setup`). For your own Intel GPU, build from an XPU environment:
+`npm run setup -- --torch xpu --venv .venv-xpu`, then `HELPER_PYTHON=.venv-xpu/bin/python npm run dist:linux`.
+The same notes on drivers and passing it on apply.
 
 ### With GitHub Actions
 `.github/workflows/desktop.yml` runs the tests on Linux and Windows, then builds the Linux AppImage and the
-Windows ZIP; the Windows GPU ZIP only when asked. It starts on a version tag (`git push origin v0.1.0`; the
-tagged commit must contain the workflow) or by hand: Actions > "Desktop app" > Run workflow, tick "gpu" for the
-GPU variant. The files are under "Artifacts" on the run's page, kept for 30 days. The first run downloads the
+Windows ZIP (with PyTorch's CUDA build). It starts on a version tag (`git push origin v0.1.0`; the tagged commit
+must contain the workflow) or by hand: Actions > "Desktop app" > Run workflow. The files are under "Artifacts" on the run's page, kept for 30 days. The first run downloads the
 models (about 2.4 GB per system); later runs take them from the cache. GitHub release files can be at most 2 GiB
 and the builds are larger, so they are not attached to a release automatically.
 

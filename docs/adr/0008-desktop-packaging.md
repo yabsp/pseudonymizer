@@ -41,6 +41,13 @@ Option 2: `npm run dist:win` and `npm run dist:win:gpu` build `Pseudonymizer-<ve
 `...-GPU.zip`. On its first start the app adds a Start menu entry for this user with its app id (`desktop/main.js`,
 `addStartMenuEntry`), which Windows needs to show notifications, and points it at the folder it runs from.
 
+Changed 2026-10-28: Windows gets only one ZIP, `Pseudonymizer-<version>-win-x64.zip`, built with PyTorch's CUDA
+build by `npm run dist:win` (`desktop/dist-win.mjs`, which stops if the environment has none). PyTorch's CUDA build
+runs on the processor when there is no NVIDIA GPU, so one download serves every computer, at about 2.3 GB more
+than the former CPU ZIP. `npm run dist:win:gpu` and the `-GPU` ZIP are gone. Linux stays on the CPU build. From an environment with
+PyTorch's XPU build (Intel GPUs), the same command builds `...-win-x64-XPU.zip` for the builder's own computer
+only, as Intel's GPU libraries may not be passed on as they are.
+
 ## Recommendation (when proposed)
 Option 2 now, as it ships PDFs and the GPU variant today with almost no new code (plus the Start menu entry for
 notifications), and option 1 when the app goes to more users, together with code signing. Option 3 becomes

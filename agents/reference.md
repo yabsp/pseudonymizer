@@ -41,10 +41,12 @@ Read and validated in `server/config.js` only (except `desktop/main.js`, which s
 | `DETECTION_HELPER` | bundled helper program (PyInstaller) used instead of Python and the scripts; `--extract-document` for PDFs |
 | `PSEUDONYMIZER_APP` | `server` or `desktop` (the desktop app sets data folder, helper and models) |
 | `PSEUDONYMIZER_API_TOKEN` | set by the desktop app: a new random secret (64 hex digits) per start; every `/api/` request needs it in `X-Pseudonymizer-Token`, which Electron adds to the window's requests (the page never sees it); removed from the environment before helpers and CLIs start |
-| `DOCLING_ARTIFACTS_PATH` | Docling models, default `~/.cache/docling/models` (read by `python/document_extraction.py`) |
+| `HF_HOME` | Hugging Face cache with the GLiNER model, default `models/huggingface` in the project folder if it exists (from `npm run setup`), else `~/.cache/huggingface`; passed to the helpers |
+| `DOCLING_ARTIFACTS_PATH` | Docling models, default `models/docling` in the project folder if it exists, else `~/.cache/docling/models` (read by `python/document_extraction.py`); passed to the helpers |
 | `PSEUDONYMIZER_CACHE` | exported ONNX models, default `~/.cache/pseudonymizer` or `%LOCALAPPDATA%\pseudonymizer` |
 | `HF_HUB_OFFLINE` | `1` (the desktop app sets it): only the GLiNER models already in the Hugging Face cache (`HF_HOME`) are offered and accepted; other model names are refused with 400 |
 | `GEMINI_API_KEY` | passed through to Gemini CLI; never stored by the app |
+| `HELPER_PYTHON` | build only (`desktop/build-helper.mjs`, `desktop/dist-win.mjs`): the Python environment the helper is built from, default `.venv` |
 
 ## Python helpers
 - `python/gliner_helper.py`: long-lived, JSON lines on stdin and stdout, matched by `id`. Requests:
@@ -105,8 +107,10 @@ with a login. API targets are parked in `parked/api-targets/`.
 |---|---|
 | settings | `settings.json` in the project folder (mode 0600; on Windows its access list is set to the user with `icacls`), desktop: `~/.config/pseudonymizer/` or `%APPDATA%\pseudonymizer\`; a copy in localStorage |
 | theme | localStorage `pseudo-theme` |
-| GLiNER and tokenizer | `~/.cache/huggingface/hub` (desktop: bundled in `resources/models`, `HF_HUB_OFFLINE=1`) |
-| Docling models | `~/.cache/docling/models` or `DOCLING_ARTIFACTS_PATH` (desktop: bundled in `resources/models/docling`) |
+| GLiNER and tokenizer | `models/huggingface/hub` in the project folder (from `npm run setup`), else `~/.cache/huggingface/hub`, or `HF_HOME` (desktop: bundled in `resources/models`, `HF_HUB_OFFLINE=1`) |
+| Docling models | `models/docling` in the project folder, else `~/.cache/docling/models`, or `DOCLING_ARTIFACTS_PATH` (desktop: bundled in `resources/models/docling`) |
+| Python environments | `.venv` (development, CPU build), `.venv-<name>` for other PyTorch builds (`npm run setup -- --torch cuda --venv .venv-cuda`) |
+| download caches of `npm run setup` | `.cache/pip`, `.cache/npm`, `.cache/electron` in the project folder |
 | ONNX export | `~/.cache/pseudonymizer/onnx/<model>` |
 | PDFs during extraction | a private `pseudo-doc-*` temp folder, deleted afterwards |
 | CLI runs | a `pseudo-*` temp folder, deleted afterwards |
@@ -117,10 +121,11 @@ sets the server's environment, imports `server/index.js`, waits for `listening`,
 `http://127.0.0.1:47291` (or a free port). Lock-down: no Node in the window, sandbox, no navigation away, no new
 windows, no permissions, spell checker off (it downloaded dictionaries from Google), every request not to
 localhost or 127.0.0.1 cancelled. Build: `desktop/build-helper.mjs` (PyInstaller, `--onedir`, with Docling, Presidio,
-spaCy and its de/fr/en models; 3.3 GB from an environment with PyTorch's CUDA build via `HELPER_PYTHON`,
-`npm run dist:win:gpu`; on Windows the runtime hook `desktop/helper_dll_directory.py` puts `_internal` on PATH so
-PyTorch's XPU build finds the SYCL DLLs PyInstaller puts there), `desktop/build-models.mjs` (copies GLiNER from the Hugging Face cache with links resolved,
-1.1 GB, and the Docling models, 1.2 GB). Windows: a ZIP per variant instead of an NSIS installer, which
+spaCy and its de/fr/en models; on Windows always from an environment with PyTorch's CUDA build (3.3 GB) or XPU
+build, `HELPER_PYTHON` or `.venv`, checked by `desktop/dist-win.mjs` behind `npm run dist:win`, which names the XPU
+ZIP `-XPU`; on Windows the runtime hook `desktop/helper_dll_directory.py` puts `_internal` on PATH so
+PyTorch's XPU build finds the SYCL DLLs PyInstaller puts there), `desktop/build-models.mjs` (copies GLiNER from the Hugging Face cache, `models/huggingface` first, with links resolved,
+1.1 GB, and the Docling models, 1.2 GB). Windows: one ZIP to pass on (CUDA build, which falls back to the processor; an XPU ZIP only for own use) instead of an NSIS installer, which
 can't hold more than 2 GiB; the app adds its own Start menu entry for notifications (ADR 0008),
 electron-builder (`package.json` `build`; only `prompts/*.default.*` are packed). Terminals inside VS Code set
 `ELECTRON_RUN_AS_NODE`, which makes Electron exit silently; `npm run desktop` removes it.

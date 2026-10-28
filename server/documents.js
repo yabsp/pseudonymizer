@@ -32,7 +32,7 @@ export function extractPdf(bytes, { formulas, accelerator }, signal) {
     const file = path.join(dir, 'document.pdf');
     fs.writeFileSync(file, bytes, { mode: 0o600 });
     const args = [...DOCUMENT_COMMAND.args, file, '--accelerator', accelerator, ...(formulas ? ['--formulas'] : [])];
-    const child = spawn(DOCUMENT_COMMAND.command, args, { cwd: DOCUMENT_COMMAND.cwd });
+    const child = spawn(DOCUMENT_COMMAND.command, args, { cwd: DOCUMENT_COMMAND.cwd, env: DOCUMENT_COMMAND.env });
     let out = '';
     let recentErrors = '';
     const timer = setTimeout(() => stopProcessTree(child), DOCUMENT_TIMEOUT_MS);
