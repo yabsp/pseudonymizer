@@ -18,8 +18,8 @@
     "desktop": "node desktop/run-dev.mjs",
     "build:helper": "node desktop/build-helper.mjs",
     "build:models": "node desktop/build-models.mjs",
-    "dist:linux": "npm run build:helper && npm run build:models && electron-builder --linux AppImage",
-    "dist:win": "node desktop/dist-win.mjs"
+    "dist:linux": "node desktop/dist.mjs linux",
+    "dist:win": "node desktop/dist.mjs win"
   },
   "devDependencies": {
     "electron": "44.8.0",

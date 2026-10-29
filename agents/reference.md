@@ -46,7 +46,7 @@ Read and validated in `server/config.js` only (except `desktop/main.js`, which s
 | `PSEUDONYMIZER_CACHE` | exported ONNX models, default `~/.cache/pseudonymizer` or `%LOCALAPPDATA%\pseudonymizer` |
 | `HF_HUB_OFFLINE` | `1` (the desktop app sets it): only the GLiNER models already in the Hugging Face cache (`HF_HOME`) are offered and accepted; other model names are refused with 400 |
 | `GEMINI_API_KEY` | passed through to Gemini CLI; never stored by the app |
-| `HELPER_PYTHON` | build only (`desktop/build-helper.mjs`, `desktop/dist-win.mjs`): the Python environment the helper is built from, default `.venv` |
+| `HELPER_PYTHON` | build only (`desktop/build-helper.mjs`, `desktop/dist.mjs`): the Python environment the helper is built from, default `.venv` |
 
 ## Python helpers
 - `python/gliner_helper.py`: long-lived, JSON lines on stdin and stdout, matched by `id`. Requests:
@@ -121,11 +121,13 @@ sets the server's environment, imports `server/index.js`, waits for `listening`,
 `http://127.0.0.1:47291` (or a free port). Lock-down: no Node in the window, sandbox, no navigation away, no new
 windows, no permissions, spell checker off (it downloaded dictionaries from Google), every request not to
 localhost or 127.0.0.1 cancelled. Build: `desktop/build-helper.mjs` (PyInstaller, `--onedir`, with Docling, Presidio,
-spaCy and its de/fr/en models; on Windows always from an environment with PyTorch's CUDA build (3.3 GB) or XPU
-build, `HELPER_PYTHON` or `.venv`, checked by `desktop/dist-win.mjs` behind `npm run dist:win`, which names the XPU
-ZIP `-XPU`; on Windows the runtime hook `desktop/helper_dll_directory.py` puts `_internal` on PATH so
+spaCy and its de/fr/en models; always from an environment with PyTorch's CUDA build (Windows 3.3 GB, Linux 7.3 GB)
+or XPU build (Linux 5.7 GB), `HELPER_PYTHON` or `.venv`, checked by `desktop/dist.mjs` behind `npm run dist:linux` and
+`npm run dist:win`, which names the XPU AppImage or ZIP `-XPU`; on Linux PyInstaller keeps the `nvidia/` package
+folders, so the RPATHs of PyTorch's libraries find the CUDA libraries; on Windows the runtime hook `desktop/helper_dll_directory.py` puts `_internal` on PATH so
 PyTorch's XPU build finds the SYCL DLLs PyInstaller puts there), `desktop/build-models.mjs` (copies GLiNER from the Hugging Face cache, `models/huggingface` first, with links resolved,
-1.1 GB, and the Docling models, 1.2 GB). Windows: one ZIP to pass on (CUDA build, which falls back to the processor; an XPU ZIP only for own use) instead of an NSIS installer, which
+1.1 GB, and the Docling models, 1.2 GB). One AppImage and one Windows ZIP to pass on (CUDA build, which falls back to
+the processor; XPU builds only for own use). Windows: a ZIP instead of an NSIS installer, which
 can't hold more than 2 GiB; the app adds its own Start menu entry for notifications (ADR 0008),
 electron-builder (`package.json` `build`; only `prompts/*.default.*` are packed). Terminals inside VS Code set
 `ELECTRON_RUN_AS_NODE`, which makes Electron exit silently; `npm run desktop` removes it.
@@ -160,6 +162,13 @@ telemetry module).
 - Docling: 2 pages with a scanned page 16 to 25 s; about 70 to 90 s per formula with `--formulas` (probably still
   in bfloat16, before float32 on the CPU from ADR 0006; see the Core Ultra 7 258V below).
 - Presidio adds 0.1 to 0.5 s per text once its language model is loaded (2 to 3 s for the first text per language).
+- Packaged Linux apps (2026-10-29, built from environments made by `npm run setup`, helper started by the server
+  as the desktop app does): a 9,807-character text with the 25 default labels. XPU app on the Arc iGPU: hardware
+  check 4.7 s, loading and checking the model 6.2 s, detection 2.4 to 3.5 s, with Presidio 4.9 s; on the CPU 3.4 s,
+  23.7 to 25.1 s and 26.2 s, the same 316 values. CUDA app (no NVIDIA GPU here, so the CPU): 3.5 s, 20.4 to 23.0 s
+  and 26.1 s, the same values. A 1-page PDF with 2 formulas and a table, one process including loading: XPU 24 s,
+  CPU 51 s (XPU app) and 53 s (CUDA app), the same Markdown. No network connections from the CUDA helper under
+  strace. Builds: `npm run setup` 3 to 4 min per environment, `npm run dist:linux` about 10 min.
 
 ## Measurements (Intel Core Ultra 7 258V, Arc 140V iGPU, Windows 11, 2026-10-21)
 `.venv` with PyTorch 2.14.1+xpu, mains power, synthetic data only.

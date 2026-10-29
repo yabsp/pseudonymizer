@@ -23,16 +23,18 @@ batches of 32 on an NVIDIA GPU, measured on Windows with an RTX 2070 (ADR 0006).
 Still to do:
 - Test on the Dell XPS 15 (Windows): the hardware check, then DirectML (`onnxruntime-directml`) and, with an NVIDIA
   GPU, the CUDA build of PyTorch; run `DETECTION_ACCELERATOR=<id> npm run test:model` there.
-- Intel GPU (Core Ultra 7 155H, Linux laptop): detection works with the XPU build of PyTorch, that laptop's
-  `.venv` (2026-10-19, see reference.md); the CPU build is kept in `.venv-cpu` there, use
-  `HELPER_PYTHON=.venv-cpu/bin/python` for a desktop build without it (docs/setup.md).
+- Intel GPU (Core Ultra 7 155H, Linux laptop): detection and PDFs work with the XPU build of PyTorch, also in the
+  packaged XPU AppImage (2026-10-29, see reference.md).
+- Linux CUDA AppImage: built and tested on a computer without an NVIDIA GPU only (it uses the CPU there); test it
+  on an NVIDIA GPU. The GitHub workflow builds it now, which needs about 42 GB of disk: check that the first run
+  has enough (the "Disk space left" step).
 - NPU (Intel Core Ultra): OpenVINO can't run GLiNER yet (dynamic shapes in its LSTM layer) and loads Intel's
   telemetry module. Revisit with a fixed-shape export, a newer OpenVINO, or ONNX Runtime's OpenVINO provider;
   the NPU also needs `intel-level-zero-npu` and `intel-driver-compiler-npu` on Linux.
-- Desktop app: Linux ships the CPU build, Windows only the CUDA build (`npm run dist:win`, which runs on the
-  processor without an NVIDIA GPU); DirectML and Intel XPU are not shipped. Local builds from an XPU environment
-  work on Linux and Windows (SYCL adapters bundled by `desktop/build-helper.mjs`; on Windows `npm run dist:win`
-  names that ZIP `-XPU`). Shipping it to others needs a licence review first: Intel's SYCL and compiler runtime are under the Intel
+- Desktop app: Linux and Windows ship only the CUDA build (`npm run dist:linux`, `npm run dist:win`, which run on
+  the processor without an NVIDIA GPU); DirectML and Intel XPU are not shipped. Local builds from an XPU environment
+  work on Linux and Windows (SYCL adapters bundled by `desktop/build-helper.mjs`; `desktop/dist.mjs` names them
+  `-XPU`). Shipping it to others needs a licence review first: Intel's SYCL and compiler runtime are under the Intel
   Developer Tools EULA (redistribution only of files in a redist list, under terms forbidding reverse engineering;
   section 4.1 allows data collection, none seen under strace).
 - Thread count on hybrid CPUs (4 threads were 25% faster than 16 on the Core Ultra 7): measure once per machine.

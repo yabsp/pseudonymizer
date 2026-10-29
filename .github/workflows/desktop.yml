@@ -1,9 +1,9 @@
-# Tests, then builds the desktop app: Linux (AppImage, CPU build of PyTorch) and Windows (ZIP, CUDA build of PyTorch,
-# which uses an NVIDIA GPU when there is one and the processor otherwise). Runs on version tags (v*) and by hand
+# Tests, then builds the desktop app for Linux (AppImage) and Windows (ZIP), both with PyTorch's CUDA build, which
+# uses an NVIDIA GPU when there is one and the processor otherwise. Runs on version tags (v*) and by hand
 # (Actions > Desktop app > Run workflow).
 #
 # The results are workflow artifacts, not release files: a GitHub release file can be at most 2 GiB, and the
-# builds are 2.3 to 6 GB (docs/adr/0008-desktop-packaging.md). Only synthetic data is used. The build environment
+# builds are about 6 to 7 GB (docs/adr/0008-desktop-packaging.md). Only synthetic data is used. The build environment
 # comes from npm run setup (scripts/setup.mjs); the models are downloaded from Hugging Face and cached between runs.
 name: Desktop app
 
@@ -55,9 +55,8 @@ jobs:
         include:
           - name: Linux
             os: ubuntu-latest
-            # The CPU build of PyTorch keeps the Linux app small.
-            setup: npm run setup
-            dist: npm run dist:linux -- --publish never
+            setup: npm run setup -- --torch cuda
+            dist: npm run dist:linux
             files: dist/*.AppImage
           - name: Windows
             os: windows-latest
@@ -70,10 +69,23 @@ jobs:
       run:
         shell: bash
     steps:
-      - name: Free disk space (Linux runners have about 14 GB)
+      # The Linux build needs about 42 GB at its peak (measured 2026-10-29): .venv 8.2 GB, pip's cache 4 GB, models
+      # 2.4 GB, build/ 10 GB, dist/linux-unpacked 9.7 GB and the AppImage 6.8 GB. The runner has about 14 GB free before this.
+      - name: Free disk space
         if: runner.os == 'Linux'
-        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL && df -h /
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL \
+            /usr/local/share/boost /usr/share/swift /usr/local/share/powershell /usr/local/share/chromium
+          df -h /
       - uses: actions/checkout@v4
+      # build/ and dist/ on the runner's second disk, when it has one.
+      - name: Put build/ and dist/ on /mnt
+        if: runner.os == 'Linux'
+        run: |
+          if [ -d /mnt ]; then
+            sudo mkdir -p /mnt/build /mnt/dist && sudo chown "$USER" /mnt/build /mnt/dist
+            ln -s /mnt/build build && ln -s /mnt/dist dist && df -h /mnt
+          fi
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -96,12 +108,15 @@ jobs:
           restore-keys: pip-${{ runner.os }}-
       # Before the setup, so setup-node's npm cache is used; the setup then skips this step.
       - run: npm ci
-      # .venv with PyTorch (CPU on Linux, CUDA on Windows), the requirements, PyInstaller and the spaCy models,
+      # .venv with PyTorch's CUDA build, the requirements, PyInstaller and the spaCy models,
       # and the models in models/ (docs/setup.md, "Quick setup").
       - name: Setup
         run: ${{ matrix.setup }}
       - name: Build
         run: ${{ matrix.dist }}
+      - name: Disk space left
+        if: always() && runner.os == 'Linux'
+        run: df -h / && if [ -d /mnt ]; then df -h /mnt; fi
       - uses: actions/upload-artifact@v4
         with:
           name: pseudonymizer-${{ github.ref_name }}-${{ matrix.name }}

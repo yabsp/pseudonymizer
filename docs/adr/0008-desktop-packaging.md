@@ -48,6 +48,10 @@ than the former CPU ZIP. `npm run dist:win:gpu` and the `-GPU` ZIP are gone. Lin
 PyTorch's XPU build (Intel GPUs), the same command builds `...-win-x64-XPU.zip` for the builder's own computer
 only, as Intel's GPU libraries may not be passed on as they are.
 
+Changed 2026-10-29: Linux does the same. `npm run dist:linux` (`desktop/dist.mjs`, shared with `dist:win`) builds
+`Pseudonymizer-<version>-x86_64.AppImage` with PyTorch's CUDA build (6.8 GB), or `...-x86_64-XPU.AppImage` (5.4 GB)
+from an XPU environment for the builder's own computer. The CPU build is no longer packaged.
+
 ## Recommendation (when proposed)
 Option 2 now, as it ships PDFs and the GPU variant today with almost no new code (plus the Start menu entry for
 notifications), and option 1 when the app goes to more users, together with code signing. Option 3 becomes
