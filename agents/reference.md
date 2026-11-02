@@ -63,8 +63,8 @@ Read and validated in `server/config.js` only (except `desktop/main.js`, which s
   would download missing ones). Recognizers for `EMAIL_ADDRESS` and `URL` are removed (the e-mail one fetches a
   domain list through tldextract; the URL one cuts e-mail addresses apart). Spans are split at line breaks and
   pieces starting or ending inside a word are dropped. `DATE_TIME` and `NRP` are ignored in the browser.
-- `python/document_extraction.py <file> [--accelerator ID] [--formulas]`: one process per PDF, one JSON object on
-  stdout. Docling with `enable_remote_services=False`, OCR with RapidOCR (torch backend, `lang=['de']`, which
+- `python/document_extraction.py <file> [--accelerator ID] [--formulas] [--stop-with-parent]`: one process per PDF,
+  one JSON object on stdout; with `--stop-with-parent` (the server always sets it) it ends when its stdin closes. Docling with `enable_remote_services=False`, OCR with RapidOCR (torch backend, `lang=['de']`, which
   selects the multilingual PP-OCRv6 model; the Latin model dropped umlauts), formulas through CodeFormulaV2 only
   with `--formulas`. Markers: `[Image N, page P: not sent]`, `[Formula N, page P: not converted]`,
   `--- Page N ---`.
@@ -114,8 +114,8 @@ with a login. API targets are parked in `parked/api-targets/`.
 | Python environments | `.venv` (development, CPU build), `.venv-<name>` for other PyTorch builds (`npm run setup -- --torch cuda --venv .venv-cuda`) |
 | download caches of `npm run setup` | `.cache/pip`, `.cache/npm`, `.cache/electron` in the project folder |
 | ONNX export | `~/.cache/pseudonymizer/onnx/<model>` |
-| PDFs during extraction | a private `pseudo-doc-*` temp folder, deleted afterwards |
-| CLI runs | a `pseudo-*` temp folder, deleted afterwards |
+| PDFs during extraction | a private temp folder `pseudo-doc-<process id>-<random>`, deleted afterwards and when the app ends; after a crash or a forced stop, at the next start if that process is gone (folders from older versions, without an id: once older than 30 minutes) |
+| CLI runs | a temp folder `pseudo-<process id>-<random>`, handled the same way |
 
 ## Desktop app
 `desktop/main.js` (Electron 44): asks the login shell for `PATH` (desktop launchers lack `~/.local/bin` and nvm),

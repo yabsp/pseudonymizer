@@ -2,8 +2,8 @@
 """The only place that uses Docling: turns a PDF into Markdown with headings, tables, formulas as LaTeX, numbered
 page breaks and a marker for every image. Images themselves are never part of the result.
 
-Run as: document_extraction.py <file.pdf> [--accelerator ID] [--formulas], with ID as in accelerators.py (default
-auto). Answers with one JSON object on stdout: {"markdown", "pages", "images", "formulas", "formulasConverted",
+Run as: document_extraction.py <file.pdf> [--accelerator ID] [--formulas] [--stop-with-parent], with ID as in
+accelerators.py (default auto). Answers with one JSON object on stdout: {"markdown", "pages", "images", "formulas", "formulasConverted",
 "tables", "device"} plus "deviceNote" when the chosen hardware can't run Docling, or {"error"}; everything else goes
 to stderr. Formulas become LaTeX only with --formulas (seconds per formula on a GPU, longer on a CPU), otherwise a
 marker."""
@@ -12,6 +12,7 @@ import json
 import os
 import re
 import sys
+import threading
 
 import accelerators
 
@@ -167,19 +168,35 @@ def extract(path, artifacts_path, formulas, backend):
     return answer
 
 
+def stop_with_parent():
+    """Ends this process as soon as the server that started it is gone, however it ended: its end of stdin then
+    closes. Otherwise a crashed app would leave the document being read and held open for minutes. os.read, as a
+    thread blocked in sys.stdin can make Python fail when it exits normally."""
+    def wait_for_parent():
+        try:
+            while os.read(0, 4096):
+                pass
+        except OSError:
+            return  # no stdin to watch, so no parent to stop with
+        os._exit(1)
+    threading.Thread(target=wait_for_parent, daemon=True).start()
+
+
 def parse_args(args):
-    options = {'accelerator': 'auto', 'formulas': False}
+    options = {'accelerator': 'auto', 'formulas': False, 'stop_with_parent': False}
     files = []
     rest = iter(args)
     for arg in rest:
         if arg == '--formulas':
             options['formulas'] = True
+        elif arg == '--stop-with-parent':
+            options['stop_with_parent'] = True
         elif arg == '--accelerator':
             options['accelerator'] = next(rest, 'auto')
         else:
             files.append(arg)
     if len(files) != 1:
-        raise ValueError('expected one PDF file, optionally --accelerator ID and --formulas')
+        raise ValueError('expected one PDF file, optionally --accelerator ID, --formulas and --stop-with-parent')
     return options, files
 
 
@@ -190,6 +207,8 @@ def main(args):
         if IMPORT_ERROR:
             raise RuntimeError(IMPORT_ERROR)
         options, files = parse_args(args)
+        if options['stop_with_parent']:
+            stop_with_parent()
         backend = accelerators.resolve(options['accelerator'])
         answer = extract(files[0], os.environ.get('DOCLING_ARTIFACTS_PATH', DEFAULT_ARTIFACTS), options['formulas'], backend)
     except Exception as e:

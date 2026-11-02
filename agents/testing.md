@@ -33,7 +33,8 @@ Stand-ins: `tests/fixtures/fake_gliner/` (packages `gliner`, `presidio_analyzer`
 `FAKE_GLINER_PID_FILE` and keeps reading for a minute, for testing cancel), `tests/fixtures/no_gliner/` (gliner fails to import),
 `tests/fixtures/fake-cli.mjs`, `tests/fixtures/fake_document_extraction.py` (stands in for
 `document_extraction.py`, `FAKE_DOCUMENT_READER` in `tests/helpers/server.mjs`; "SLOW", "FAIL", "CRASH" in the
-PDF change its behaviour).
+PDF change its behaviour). On Windows, killing a process is always a forced stop, so a normal end of the server is
+only tested on other systems; the test there is skipped.
 
 ## Documents and baselines
 `tests/fixtures/documents.mjs` holds the synthetic documents with `mustHide` and `mustKeep`; it includes

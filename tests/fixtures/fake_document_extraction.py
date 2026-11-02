@@ -1,13 +1,26 @@
 """Stands in for python/document_extraction.py in the server tests' copy of the project, so they run without
-Docling: argv is [file, --accelerator, id, --formulas?]. Writes the path of the file it was given to FAKE_DOC_LOG, so tests can check
-it is deleted afterwards. A PDF containing "SLOW" makes it wait (to test cancelling), "FAIL" makes it answer with
+Docling: argv is [file, --accelerator, id, --stop-with-parent?, --formulas?]. Writes the path of the file it was given to FAKE_DOC_LOG, so tests can check
+it is deleted afterwards, and its process id to FAKE_DOC_PID_FILE. Like the real one, with --stop-with-parent it ends when its stdin closes. A PDF containing "SLOW" makes it wait (to test cancelling), "FAIL" makes it answer with
 an error, "CRASH" makes it exit without an answer, "ENV" makes it answer with the model folders it was given
 (HF_HOME and DOCLING_ARTIFACTS_PATH, one per line, empty if unset)."""
 import json
 import os
 import sys
+import threading
 import time
 
+
+def wait_for_parent():
+    while os.read(0, 4096):
+        pass
+    os._exit(1)
+
+
+if '--stop-with-parent' in sys.argv:
+    threading.Thread(target=wait_for_parent, daemon=True).start()
+if os.environ.get('FAKE_DOC_PID_FILE'):
+    with open(os.environ['FAKE_DOC_PID_FILE'], 'w', encoding='utf-8') as pid_file:
+        pid_file.write(str(os.getpid()))
 file = sys.argv[1]
 formulas = '--formulas' in sys.argv[2:]
 accelerator = sys.argv[sys.argv.index('--accelerator') + 1] if '--accelerator' in sys.argv else 'auto'

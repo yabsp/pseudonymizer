@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { describe, it } from 'node:test';
 import { PYTHON } from '../helpers/python.mjs';
@@ -34,7 +34,14 @@ describe('document extraction arguments and device', () => {
     const parsed = runPython(`
 import json, document_extraction as d
 print(json.dumps([d.parse_args(['a.pdf']), d.parse_args(['--accelerator', 'torch-cuda', 'a.pdf', '--formulas'])]))`);
-    assert.deepEqual(parsed, [[{ accelerator: 'auto', formulas: false }, ['a.pdf']], [{ accelerator: 'torch-cuda', formulas: true }, ['a.pdf']]]);
+    assert.deepEqual(parsed, [[{ accelerator: 'auto', formulas: false, stop_with_parent: false }, ['a.pdf']], [{ accelerator: 'torch-cuda', formulas: true, stop_with_parent: false }, ['a.pdf']]]);
+  });
+
+  it('reads --stop-with-parent', () => {
+    const [options] = runPython(`
+import json, document_extraction as d
+print(json.dumps(d.parse_args(['a.pdf', '--stop-with-parent'])))`);
+    assert.equal(options.stop_with_parent, true);
   });
 
   it('rejects a second file', () => {
@@ -61,6 +68,38 @@ print(json.dumps([d.device_note('torch-cuda', 'cuda'), d.device_note('torch-cpu'
 import json, document_extraction as d
 print(json.dumps([d.formula_dtype('cpu', None), d.formula_dtype('cuda', 7), d.formula_dtype('cuda', 8), d.formula_dtype('mps', None)]))`);
     assert.deepEqual(dtypes, ['float32', 'float16', 'bfloat16', null]);
+  });
+});
+
+describe('document extraction when the server is gone', () => {
+  const SECONDS = 120;
+  // Starts Python with stop_with_parent() active; "ready" on stdout says the watch is running.
+  const start = (rest) => spawn(PYTHON, ['-c', `
+import document_extraction as d, time
+d.stop_with_parent()
+print('ready', flush=True)
+${rest}`], { cwd: path.join(ROOT, 'python'), stdio: ['pipe', 'pipe', 'pipe'] });
+  const exited = (child) => new Promise((resolve) => {
+    let errors = '';
+    child.stderr.on('data', (d) => (errors += d));
+    child.on('close', (code) => resolve({ code, errors }));
+  });
+  const ready = (child) => new Promise((resolve) => child.stdout.on('data', resolve));
+
+  it('stops reading when its stdin closes', async () => {
+    const child = start(`time.sleep(${SECONDS})`);
+    const done = exited(child);
+    await ready(child);
+    child.stdin.end();
+    assert.equal((await done).code, 1);
+  });
+
+  it('still ends normally while the server is there', async () => {
+    const child = start('');
+    const { code, errors } = await exited(child);
+    child.stdin.end();
+    assert.equal(code, 0, errors);
+    assert.doesNotMatch(errors, /Fatal Python error/);
   });
 });
 

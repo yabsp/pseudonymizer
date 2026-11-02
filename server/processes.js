@@ -1,9 +1,10 @@
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { COMMAND_SEARCH_PATH, WINDOWS_COMMAND_EXTENSIONS, WINDOWS_TOOLS_DIR } from './config.js';
 
 const IS_WINDOWS = process.platform === 'win32';
+const STOP_NOW_TIMEOUT_MS = 5000;
 
 // Arguments that need quotes when a command runs through cmd.exe: whitespace or any of the shell characters " & | < > ^
 const NEEDS_WINDOWS_QUOTES = /[\s"&|<>^]/;
@@ -60,4 +61,15 @@ export function stopProcessTree(child) {
   taskkill.on('close', (code) => {
     if (code !== 0) child.kill();
   });
+}
+
+/** Like stopProcessTree, but finished when it returns, for when the app is ending and nothing asynchronous runs any more. */
+export function stopProcessTreeNow(child) {
+  if (child.exitCode !== null || child.signalCode !== null) return;
+  if (!IS_WINDOWS || !child.pid) {
+    child.kill();
+    return;
+  }
+  const taskkill = spawnSync(path.join(WINDOWS_TOOLS_DIR, 'taskkill.exe'), ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true, timeout: STOP_NOW_TIMEOUT_MS });
+  if (taskkill.status !== 0) child.kill();
 }

@@ -1,11 +1,11 @@
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { DOCUMENT_COMMAND, DOCUMENT_FORMATS, DOCUMENT_TIMEOUT_MS, MAX_PDF_BYTES } from './config.js';
 import { ACCELERATOR } from './gliner.js';
 import { BodyTooLargeError, readBytes, rejectUnlessFromApp, send } from './http.js';
 import { stopProcessTree } from './processes.js';
+import { createWorkFolder, deleteWorkFolder, setFolderProcess } from './work-folders.js';
 
 // Every PDF file starts with "%PDF-".
 const PDF_SIGNATURE = '%PDF-';
@@ -24,22 +24,29 @@ const pickResult = ({ markdown, pages, images, formulas, formulasConverted, tabl
 
 /**
  * Extracts the PDF in a separate process. The file is written to a private temporary folder that is deleted
- * afterwards in every case; nothing of it is kept or logged.
+ * afterwards in every case, also when the app ends meanwhile (work-folders.js); nothing of it is kept or logged.
  */
 export function extractPdf(bytes, { formulas, accelerator }, signal) {
   return new Promise((resolve, reject) => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pseudo-doc-'));
+    const dir = createWorkFolder('pseudo-doc-');
     const file = path.join(dir, 'document.pdf');
-    fs.writeFileSync(file, bytes, { mode: 0o600 });
-    const args = [...DOCUMENT_COMMAND.args, file, '--accelerator', accelerator, ...(formulas ? ['--formulas'] : [])];
-    const child = spawn(DOCUMENT_COMMAND.command, args, { cwd: DOCUMENT_COMMAND.cwd, env: DOCUMENT_COMMAND.env });
+    const args = [...DOCUMENT_COMMAND.args, file, '--accelerator', accelerator, '--stop-with-parent', ...(formulas ? ['--formulas'] : [])];
+    let child;
+    try {
+      fs.writeFileSync(file, bytes, { mode: 0o600 });
+      child = spawn(DOCUMENT_COMMAND.command, args, { cwd: DOCUMENT_COMMAND.cwd, env: DOCUMENT_COMMAND.env });
+    } catch (e) {
+      deleteWorkFolder(dir);
+      return reject(e);
+    }
+    setFolderProcess(dir, child);
     let out = '';
     let recentErrors = '';
     const timer = setTimeout(() => stopProcessTree(child), DOCUMENT_TIMEOUT_MS);
     signal.addEventListener('abort', () => stopProcessTree(child), { once: true });
     const cleanUp = () => {
       clearTimeout(timer);
-      fs.rmSync(dir, { recursive: true, force: true });
+      deleteWorkFolder(dir);
     };
     child.stdout.on('data', (d) => (out += d));
     child.stderr.on('data', (d) => (recentErrors = (recentErrors + d).slice(-2000)));

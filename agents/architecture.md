@@ -66,7 +66,9 @@ AI tool the user has installed and logged in to.
   (`state.document` in `ui/workflow.js`) that is sent as an attachment inside the message or saved as Markdown.
 - **PDF extraction** (`server/documents.js`, `python/document_extraction.py`): the page uploads the PDF to
   `POST /api/extract/pdf`; the server writes it to a private temporary folder, starts one Docling process per
-  file (killed on cancel or after 30 minutes) and deletes the folder afterwards. Docling returns Markdown with
+  file (killed on cancel or after 30 minutes) and deletes the folder afterwards, also when the app ends meanwhile
+  (`server/work-folders.js`). A crash or a forced stop can't clean up: the reader then stops by itself when its stdin
+  closes (`--stop-with-parent`), and the next start deletes the folder of an owner that is gone. Docling returns Markdown with
   tables, numbered image, formula and page markers, and formulas as LaTeX when asked (`?formulas=1`). It runs
   on the device of the Hardware setting (`--accelerator`, see "Hardware"); the answer says which (`device`, plus
   `deviceNote` when the chosen hardware is one Docling can't use), and the formula model's precision follows the

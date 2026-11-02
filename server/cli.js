@@ -1,9 +1,9 @@
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { ADAPTERS_FILE, CLI_TIMEOUT_MS } from './config.js';
 import { readBody, rejectUnlessFromApp, send } from './http.js';
 import { startCommand, stopProcessTree } from './processes.js';
+import { createWorkFolder, deleteWorkFolder, setFolderProcess } from './work-folders.js';
 
 // Model names as the CLIs accept them:
 //   ^(?!-)       must not start with "-", so a model name can never become a command-line option
@@ -42,9 +42,8 @@ function runAdapter(adapter, { prompt, system = '', model = '' }, signal) {
     if (model && !MODEL_NAME.test(model)) return reject(new Error('Invalid model name.'));
 
     // An empty working directory per run, so the CLI never sees project files.
-    const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pseudo-'));
+    const workDir = createWorkFolder('pseudo-');
     const systemFile = path.join(workDir, 'system.md');
-    fs.writeFileSync(systemFile, system);
 
     const args = buildArgs(adapter, model, systemFile);
     // A replacer function, so "$$" (a formula in LaTeX) or "$&" in the prompt reach the CLI as the preview shows them.
@@ -52,18 +51,20 @@ function runAdapter(adapter, { prompt, system = '', model = '' }, signal) {
     const notStarted = (e) => new Error(`Could not start "${adapter.command}": ${e.message}. Is it installed and on PATH?`);
     let child;
     try {
+      fs.writeFileSync(systemFile, system);
       child = startCommand(adapter.command, args, { cwd: workDir });
     } catch (e) {
-      fs.rmSync(workDir, { recursive: true, force: true });
+      deleteWorkFolder(workDir);
       return reject(notStarted(e));
     }
+    setFolderProcess(workDir, child);
 
     let out = '', err = '';
     const timer = setTimeout(() => stopProcessTree(child), CLI_TIMEOUT_MS);
     signal.addEventListener('abort', () => stopProcessTree(child), { once: true });
     const cleanUp = () => {
       clearTimeout(timer);
-      fs.rmSync(workDir, { recursive: true, force: true });
+      deleteWorkFolder(workDir);
     };
     const hint = adapter.loginHint ? ` ${adapter.loginHint}` : '';
 

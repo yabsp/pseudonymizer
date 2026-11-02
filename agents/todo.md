@@ -5,11 +5,6 @@ confidentiality (AGENTS.md, "Confidentiality invariants"). Decisions still open 
 
 ## Found in a code review (2026-11-02), not fixed yet
 Most important first. "Reproduced" means with the stand-ins and synthetic data.
-- **Confidentiality: a PDF stays in the temp folder when the app ends during extraction.** `extractPdf` only deletes
-  its `pseudo-doc-*` folder when the reader finishes, and neither `server/` nor `desktop/main.js` handles the app
-  ending. Reproduced with the server force-stopped: `document.pdf` stayed. Needs: stop readers and delete the folders
-  on exit, and delete leftover `pseudo-doc-*` and `pseudo-*` folders at the next start, as a crash can't clean up.
-  It also fails to delete the folder if writing the PDF or starting the reader throws (from reading the code).
 - **Confidentiality: `npm start` lets any program on the computer read documents.** `GET /api/jobs/<id>` answers with
   the text given only a correct `Host`. Reproduced. Other websites can't read it (no CORS), and the desktop app needs
   its token. Decide whether `npm start` gets a token too, or say so in `docs/setup.md`.
@@ -17,6 +12,15 @@ Most important first. "Reproduced" means with the stand-ins and synthetic data.
   character split across two pieces breaks. Reproduced: "Gr��sse". Needs `setEncoding('utf8')` on stdout and stderr.
 - **The CLI route doesn't validate its request.** No `prompt` sends the word "undefined" to the AI tool, a number is
   sent as text, malformed JSON answers 502 instead of 400. Reproduced. The page always sends a text.
+- **"Find sensitive values" in the first seconds after start.** The prompts load after the page is usable (about 2 s
+  in the packaged app). GLiNER then stops with "the GLiNER labels need fixing", which is safe but misleading. From
+  reading the code, Ollama would run with empty instructions then, and Send with an empty system prompt. Lock the
+  button until `loadPrompts` is done.
+- **An AHV number can get the wrong kind of placeholder.** In the packaged app, "AHV 756.1234.5678.97" became
+  `[[IP_1]]`, as the model's longer value with the label wins over the pattern's. It is hidden, but the AI model
+  reads it as an IP address.
+- **PyTorch's cache in the temp folder.** The real helper leaves a `torchinductor_<user>` folder there. Check what is
+  in it; it probably holds compiled code only.
 - **No size limit on JSON requests.** `readBody` has none, unlike PDF uploads. From reading the code, not tested.
 - **Check on Windows: a console window from the helpers.** `server/gliner.js` and `server/documents.js` start them
   without `windowsHide`, unlike `server/processes.js`, and the bundled helper is a console program. Not tested in the

@@ -159,7 +159,9 @@ async function start() {
   useTerminalSearchPath();
   const port = await choosePort();
   configureServer(port);
-  const { listening } = await import('../server/index.js');
+  const { listening, stopAllWork } = await import('../server/index.js');
+  // Before Electron ends the process, so a document being read does not stay in the temporary folder.
+  app.on('will-quit', stopAllWork);
   // server/config.js has read it; the helpers and AI tools the server starts don't inherit it.
   delete process.env.PSEUDONYMIZER_API_TOKEN;
   await listening;

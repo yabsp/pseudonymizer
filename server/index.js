@@ -9,6 +9,15 @@ import { addJob, getJob, listJobs, moveJob, removeJob } from './jobs.js';
 import { savePrompt } from './prompts.js';
 import { getSettings, saveSettings } from './settings.js';
 import { serveStatic } from './static.js';
+import { deleteLeftovers, stopAllWork } from './work-folders.js';
+
+export { stopAllWork };
+
+// A document being read must not stay on the disk when the app ends. A signal would otherwise end the process
+// without 'exit'. A forced stop runs nothing at all, so the next start cleans up.
+deleteLeftovers();
+process.on('exit', stopAllWork);
+for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP', 'SIGBREAK']) process.on(signal, () => process.exit(0));
 
 const ROUTES = [
   { method: 'GET', path: '/api/about', handler: getAbout },
