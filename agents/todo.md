@@ -3,6 +3,26 @@
 Planned work, roughly in order. Each item lists what it is for, a first design and what must stay true for
 confidentiality (AGENTS.md, "Confidentiality invariants"). Decisions still open are marked as such.
 
+## Found in a code review (2026-11-02), not fixed yet
+Most important first. "Reproduced" means with the stand-ins and synthetic data.
+- **Confidentiality: a PDF stays in the temp folder when the app ends during extraction.** `extractPdf` only deletes
+  its `pseudo-doc-*` folder when the reader finishes, and neither `server/` nor `desktop/main.js` handles the app
+  ending. Reproduced with the server force-stopped: `document.pdf` stayed. Needs: stop readers and delete the folders
+  on exit, and delete leftover `pseudo-doc-*` and `pseudo-*` folders at the next start, as a crash can't clean up.
+  It also fails to delete the folder if writing the PDF or starting the reader throws (from reading the code).
+- **Confidentiality: `npm start` lets any program on the computer read documents.** `GET /api/jobs/<id>` answers with
+  the text given only a correct `Host`. Reproduced. Other websites can't read it (no CORS), and the desktop app needs
+  its token. Decide whether `npm start` gets a token too, or say so in `docs/setup.md`.
+- **Answers can lose umlauts.** `server/cli.js` turns each piece of the CLI's output into text on its own, so a
+  character split across two pieces breaks. Reproduced: "Gr��sse". Needs `setEncoding('utf8')` on stdout and stderr.
+- **The CLI route doesn't validate its request.** No `prompt` sends the word "undefined" to the AI tool, a number is
+  sent as text, malformed JSON answers 502 instead of 400. Reproduced. The page always sends a text.
+- **No size limit on JSON requests.** `readBody` has none, unlike PDF uploads. From reading the code, not tested.
+- **Check on Windows: a console window from the helpers.** `server/gliner.js` and `server/documents.js` start them
+  without `windowsHide`, unlike `server/processes.js`, and the bundled helper is a console program. Not tested in the
+  packaged app.
+- **`npm test` is slow on Windows:** 188 s on the Core Ultra 7 258V; the docs say a few seconds. Not looked into.
+
 ## 1. Documents list: follow-ups
 The Documents tab (batch conversion with detection, docs/adr/0005-document-jobs-in-memory.md) and notifications
 are done. Open:

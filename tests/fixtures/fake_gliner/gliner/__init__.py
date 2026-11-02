@@ -1,9 +1,11 @@
 """Stand-in for the gliner package: finds the strings in FAKE_GLINER_ENTITIES ({"text": ["label", score]}).
 Like the real model it reads only the first FAKE_GLINER_MAX_WORDS words (counted the same way) and warns
-when it cuts. Model names starting with "missing/" fail to load; "crash/" kills the process."""
+when it cuts. Model names starting with "missing/" fail to load; "crash/" kills the process. A text with
+FAKE_SLOW writes this process's id to FAKE_GLINER_PID_FILE and then keeps reading for a minute."""
 import json
 import os
 import re
+import time
 import warnings
 
 MAX_WORDS = int(os.environ.get('FAKE_GLINER_MAX_WORDS', '384'))
@@ -27,6 +29,10 @@ class GLiNER:
         return self
 
     def inference(self, texts, labels, threshold=0.5, batch_size=8):
+        if any('FAKE_SLOW' in text for text in texts):
+            with open(os.environ['FAKE_GLINER_PID_FILE'], 'w') as pid_file:
+                pid_file.write(str(os.getpid()))
+            time.sleep(60)
         return [self.predict_entities(text, labels, threshold) for text in texts]
 
     def predict_entities(self, text, labels, threshold=0.5):

@@ -49,7 +49,9 @@ Read and validated in `server/config.js` only (except `desktop/main.js`, which s
 | `HELPER_PYTHON` | build only (`desktop/build-helper.mjs`, `desktop/dist.mjs`): the Python environment the helper is built from, default `.venv` |
 
 ## Python helpers
-- `python/gliner_helper.py`: long-lived, JSON lines on stdin and stdout, matched by `id`. Requests:
+- `python/gliner_helper.py`: long-lived, JSON lines on stdin and stdout, matched by `id`; `server/gliner.js` sends
+  one request at a time. A closed connection cancels a detection: a waiting one is dropped, a running one ends the
+  helper, so the next detection loads the model again (5 to 25 s, see Measurements). Requests:
   `{ id, text, labels, threshold, model, engine: "gliner" | "presidio", language, accelerator }` or
   `{ id, probe: true }`. Answers `{ id, entities, language?, runtime }`, `{ id, system, backends }` or
   `{ id, error }`. An empty text only loads the model. Texts are read in windows of 150 GLiNER words with an
@@ -119,7 +121,7 @@ with a login. API targets are parked in `parked/api-targets/`.
 `desktop/main.js` (Electron 44): asks the login shell for `PATH` (desktop launchers lack `~/.local/bin` and nvm),
 sets the server's environment, imports `server/index.js`, waits for `listening`, then opens
 `http://127.0.0.1:47291` (or a free port). Lock-down: no Node in the window, sandbox, no navigation away, no new
-windows, no permissions, spell checker off (it downloaded dictionaries from Google), every request not to
+windows, no permissions except notifications and writing to the clipboard, spell checker off (it downloaded dictionaries from Google), every request not to
 localhost or 127.0.0.1 cancelled. Build: `desktop/build-helper.mjs` (PyInstaller, `--onedir`, with Docling, Presidio,
 spaCy and its de/fr/en models; always from an environment with PyTorch's CUDA build (Windows 3.3 GB, Linux 7.3 GB)
 or XPU build (Linux 5.7 GB), `HELPER_PYTHON` or `.venv`, checked by `desktop/dist.mjs` behind `npm run dist:linux` and

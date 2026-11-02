@@ -43,7 +43,9 @@ AI tool the user has installed and logged in to.
    and the same values in capitals or title case ("RETO AMMANN") share the placeholder of the full value.
 2. **Review.** The highlighted preview shows exactly what will be sent; clicking a placeholder shows its
    original value and can keep it visible. The full mapping table (value -> placeholder such as
-   `[[PERSON_1]]`) is behind "Edit values".
+   `[[PERSON_1]]`) is behind "Edit values". Send, Copy message and Save as file are locked (`whySendIsBlocked` in
+   `core/prompt.js`) unless detection finished on exactly the current text; a saved list that was loaded replaces
+   the values found, so it locks them too, while restoring answers stays possible.
 3. **Replace.** `core/mapping.js` replaces the values in code, not with a model, so it is deterministic.
 4. **Send.** The server runs the selected CLI with the pseudonymized prompt on stdin.
 5. **Restore.** The answer's placeholders are replaced with the original values in the browser.
@@ -85,7 +87,9 @@ AI tool the user has installed and logged in to.
   one module per feature (`gliner.js` serves `POST /api/detect/gliner` and `POST /api/detect/presidio`,
   which also takes `language`: `auto`, `de`, `fr` or `en`; an Italian text is refused). Every API request must come from the app itself (Host, Origin and
   Content-Type checks in `http.js`).
-- **Python helper** (`python/gliner_helper.py`): reads one JSON request per line on stdin, writes one JSON
+- **Python helper** (`python/gliner_helper.py`): `server/gliner.js` gives it one request at a time and keeps the
+  others waiting. Cancelling a waiting request only drops it; cancelling the running one ends the helper, and the
+  next request starts a new one, which loads the model again. It reads one JSON request per line on stdin, writes one JSON
   answer per line on stdout, matched by `id`:
   `{"id", "text", "labels", "threshold", "model", "engine", "language", "accelerator"}` ->
   `{"id", "entities": [{"text", "label", "start", "end", "score", "source"}], "language", "runtime"}` or
@@ -103,7 +107,7 @@ AI tool the user has installed and logged in to.
 found when the app is started from the desktop), sets the server's environment (data folder, bundled helper,
 offline model folder), imports the unchanged `server/index.js` and waits for `listening`, then opens a window on
 `http://127.0.0.1:<port>` (port 47291, or a free one). The window has no Node access, can't navigate away or
-open new windows, gets no permission except notifications (shown natively, with the app id set on Windows), and every request that doesn't go to this machine is cancelled.
+open new windows, gets no permission except notifications (shown natively, with the app id set on Windows) and writing to the clipboard (the Copy buttons), and every request that doesn't go to this machine is cancelled.
 The package (an AppImage on Linux, a ZIP on Windows, ADR 0008) carries the app code in `app.asar`, the helper
 built by PyInstaller (GLiNER, Presidio, Docling) in `resources/helper` and the models in `resources/models`. It
 works offline, so only the GLiNER models it ships can be chosen (`GLINER_MODELS` in `server/config.js`). See

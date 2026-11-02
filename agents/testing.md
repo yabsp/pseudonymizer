@@ -29,7 +29,8 @@ out and only reported in totals. Synthetic documents only. The npm scripts run t
 | `tests/model/` | detection quality with the real models (`RUN_MODEL_TESTS=1`) |
 
 Stand-ins: `tests/fixtures/fake_gliner/` (packages `gliner`, `presidio_analyzer`, `spacy` that find the strings in
-`FAKE_GLINER_ENTITIES` and `FAKE_PRESIDIO_ENTITIES`), `tests/fixtures/no_gliner/` (gliner fails to import),
+`FAKE_GLINER_ENTITIES` and `FAKE_PRESIDIO_ENTITIES`; a text with `FAKE_SLOW` writes the process id to
+`FAKE_GLINER_PID_FILE` and keeps reading for a minute, for testing cancel), `tests/fixtures/no_gliner/` (gliner fails to import),
 `tests/fixtures/fake-cli.mjs`, `tests/fixtures/fake_document_extraction.py` (stands in for
 `document_extraction.py`, `FAKE_DOCUMENT_READER` in `tests/helpers/server.mjs`; "SLOW", "FAIL", "CRASH" in the
 PDF change its behaviour).

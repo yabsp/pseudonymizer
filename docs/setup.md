@@ -142,7 +142,7 @@ need a GPU build of PyTorch and stop otherwise. Both builds run on the processor
 | Build | Set up with | Result |
 |---|---|---|
 | NVIDIA (CUDA), the one to pass on | `npm run setup -- --torch cuda --venv .venv-cuda` | `dist/Pseudonymizer-<version>-x86_64.AppImage` (6.8 GB) or `dist/Pseudonymizer-<version>-win-x64.zip` (about 7.6 GB unpacked) |
-| Intel Arc and Core Ultra graphics (XPU), for your own computer | `npm run setup -- --torch xpu --venv .venv-xpu` | the same names ending in `-XPU`: AppImage 5.4 GB, ZIP about 5 GB unpacked |
+| Intel Arc and Core Ultra graphics (XPU), for your own computer | `npm run setup -- --torch xpu --venv .venv-xpu` | the same names ending in `-XPU`: AppImage 5.4 GB, ZIP 4.9 GB, about 7.1 GB unpacked |
 
 Then build with `HELPER_PYTHON` set to that environment's Python:
 ```

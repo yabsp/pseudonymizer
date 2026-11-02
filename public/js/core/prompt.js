@@ -11,6 +11,17 @@ export function buildPrompt(pseudoText, extraText, { isDocument = false } = {}) 
   return [body, extraText.trim()].filter(Boolean).join('\n\n');
 }
 
+/**
+ * Why the text must not leave the machine yet, or null if it may: 'notDetected', 'textChanged' (detection ran on
+ * another text, so new values would stay visible), or the problem detection left: 'incomplete' (parts of the text
+ * were not read) or 'listLoaded' (a saved list replaced the values found). textAtLastDetection === null: not detected yet.
+ */
+export function whySendIsBlocked({ textAtLastDetection, currentText, detectionProblem }) {
+  if (textAtLastDetection === null) return 'notDetected';
+  if (textAtLastDetection !== currentText) return 'textChanged';
+  return detectionProblem;
+}
+
 /** The mapped values found in text that is sent unchanged, so the user can be warned about them. */
 export function findMappedValues(mapping, original) {
   const text = normalizeText(original);

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { buildPrompt, findMappedValues } from '../helpers/core.mjs';
+import { buildPrompt, findMappedValues, whySendIsBlocked } from '../helpers/core.mjs';
 
 const MAPPING = [
   { original: 'Reto Ammann', placeholder: '[[PERSON_1]]' },
@@ -24,6 +24,36 @@ describe('the prompt that is sent', () => {
     assert.equal(buildPrompt('[[PERSON_1]] was admitted.', '   \n'), '[[PERSON_1]] was admitted.');
     assert.equal(buildPrompt('  ', 'Question only'), 'Question only');
     assert.equal(buildPrompt('', ''), '');
+  });
+});
+
+describe('when the text may be sent', () => {
+  const TEXT = 'Herr Reto Ammann wurde behandelt.';
+  const blocked = (textAtLastDetection, currentText, detectionProblem = null) => whySendIsBlocked({ textAtLastDetection, currentText, detectionProblem });
+
+  it('only after detection ran on exactly this text and finished', () => {
+    assert.equal(blocked(TEXT, TEXT), null);
+  });
+
+  it('not before detection', () => {
+    assert.equal(blocked(null, TEXT), 'notDetected');
+    assert.equal(blocked(null, ''), 'notDetected');
+  });
+
+  it('not after the text or the document changed, whatever was found before', () => {
+    assert.equal(blocked(TEXT, `${TEXT} Frau Nadine Gerber auch.`), 'textChanged');
+    assert.equal(blocked(TEXT, 'Ein anderes Dokument von Frau Nadine Gerber.'), 'textChanged');
+    assert.equal(blocked(TEXT, `${TEXT} `), 'textChanged');
+    assert.equal(blocked(TEXT, ''), 'textChanged');
+  });
+
+  it('not when parts of the text were not read, or a saved list replaced the values found', () => {
+    assert.equal(blocked(TEXT, TEXT, 'incomplete'), 'incomplete');
+    assert.equal(blocked(TEXT, TEXT, 'listLoaded'), 'listLoaded');
+  });
+
+  it('asks for detection on the new text first when both apply', () => {
+    assert.equal(blocked(TEXT, 'Ein anderer Text.', 'incomplete'), 'textChanged');
   });
 });
 

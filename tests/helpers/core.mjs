@@ -9,7 +9,7 @@ export { addDetected, addEntry, normalizeText, parseMapping, pseudonymize, resto
 export { isOnlyCommonWords, parseWordList } from '../../public/js/core/common-words.js';
 export { chunkText } from '../../public/js/core/chunking.js';
 export { detectWithPatterns } from '../../public/js/core/patterns.js';
-export { buildPrompt, findMappedValues } from '../../public/js/core/prompt.js';
+export { buildPrompt, findMappedValues, whySendIsBlocked } from '../../public/js/core/prompt.js';
 export { categoryForLabel, parseGlinerLabels } from '../../public/js/detection/gliner-labels.js';
 export { categorizePresidioEntities } from '../../public/js/detection/presidio.js';
 

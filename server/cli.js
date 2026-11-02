@@ -12,6 +12,8 @@ const MODEL_NAME = /^(?!-)[\w.:\/-]+$/;
 
 // A stack-trace line such as "    at setupUser (file.js:311:5)": optional spaces, then "at" and a space.
 const STACK_FRAME = /^\s*at\s/;
+// The fields of an adapter's input template: "{system}" or "{prompt}", the name in group 1.
+const INPUT_FIELD = /\{(system|prompt)\}/g;
 const ERROR_LINES_SHOWN = 2;
 const ERROR_CHARS_SHOWN = 600;
 
@@ -27,7 +29,8 @@ function summarizeErrors(stderr) {
 const isModelList = (models) => Array.isArray(models) && models.every((m) => typeof m?.id === 'string' && typeof m?.label === 'string');
 
 function buildArgs(adapter, model, systemFile) {
-  const fill = (arg) => arg.replaceAll('{model}', model).replaceAll('{systemFile}', systemFile);
+  // Replacer functions, as "$" has a special meaning in a replacement string; a folder name may contain "$$".
+  const fill = (arg) => arg.replaceAll('{model}', () => model).replaceAll('{systemFile}', () => systemFile);
   return adapter.args.flatMap((arg) => {
     if (arg !== '{modelArgs}') return [fill(arg)];
     return model ? (adapter.modelArgs || []).map(fill) : [];
@@ -44,7 +47,8 @@ function runAdapter(adapter, { prompt, system = '', model = '' }, signal) {
     fs.writeFileSync(systemFile, system);
 
     const args = buildArgs(adapter, model, systemFile);
-    const input = (adapter.stdin || '{prompt}').replaceAll('{system}', system).replaceAll('{prompt}', prompt);
+    // A replacer function, so "$$" (a formula in LaTeX) or "$&" in the prompt reach the CLI as the preview shows them.
+    const input = (adapter.stdin || '{prompt}').replace(INPUT_FIELD, (_, field) => (field === 'system' ? system : prompt));
     const notStarted = (e) => new Error(`Could not start "${adapter.command}": ${e.message}. Is it installed and on PATH?`);
     let child;
     try {

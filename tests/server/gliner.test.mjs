@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { after, before, describe, it } from 'node:test';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { FIXTURES, startServer } from '../helpers/server.mjs';
 
 const FAKE_ENV = {
@@ -82,6 +85,83 @@ describe('GLiNER detection endpoint', () => {
 
   it('refuses other websites', async () => {
     assert.equal((await detect({ text: TEXT }, { Origin: 'https://attacker.example' })).status, 403);
+  });
+});
+
+describe('cancelling detection', () => {
+  let server;
+  let pidFile;
+  const isAlive = (pid) => { try { process.kill(pid, 0); return true; } catch { return false; } };
+  const waitUntil = async (condition, what) => {
+    for (let waited = 0; !condition(); waited += 50) {
+      if (waited > 30000) throw new Error('timed out waiting until ' + what);
+      await sleep(50);
+    }
+  };
+  // Starts a detection that the signal can cancel, as the page does; a cancelled one resolves to its error.
+  const detect = (text, signal) => server.request({
+    method: 'POST',
+    path: '/api/detect/gliner',
+    signal,
+    headers: { Origin: server.origin, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text, labels: ['person', 'organization'], threshold: 0.4, model: MODEL, accelerator: 'torch-cpu' }),
+  }).catch((e) => e);
+  /** Starts a detection the helper keeps reading; resolves once it does, with the id of the helper's process. */
+  async function startSlow(signal) {
+    fs.rmSync(pidFile, { force: true });
+    const result = detect('FAKE_SLOW', signal);
+    await waitUntil(() => fs.existsSync(pidFile) && fs.statSync(pidFile).size > 0, 'the helper reads the text');
+    return { result, pid: Number(fs.readFileSync(pidFile, 'utf8')) };
+  }
+
+  before(async () => {
+    pidFile = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'pseudo-pid-')), 'helper.pid');
+    server = await startServer({ env: { ...FAKE_ENV, FAKE_GLINER_PID_FILE: pidFile } });
+  });
+  after(async () => {
+    await server.close();
+    fs.rmSync(path.dirname(pidFile), { recursive: true, force: true });
+  });
+
+  it('stops the helper\'s work on a running detection, and the next one works', async () => {
+    const cancel = new AbortController();
+    const { result, pid } = await startSlow(cancel.signal);
+    assert.ok(isAlive(pid));
+    cancel.abort();
+    assert.equal((await result).name, 'AbortError');
+    await waitUntil(() => !isAlive(pid), 'the helper has stopped');
+    const next = await detect(TEXT);
+    assert.equal(next.status, 200, next.body);
+    assert.equal(next.json().entities.length, 2);
+    assert.ok(server.isRunning());
+  });
+
+  it('answers a waiting detection when the running one is cancelled', async () => {
+    const cancel = new AbortController();
+    const { result, pid } = await startSlow(cancel.signal);
+    const waitingOne = detect(TEXT);
+    await sleep(100);
+    cancel.abort();
+    await result;
+    const answer = await waitingOne;
+    assert.equal(answer.status, 200, answer.body);
+    assert.equal(answer.json().entities[0].text, 'Reto Ammann');
+    await waitUntil(() => !isAlive(pid), 'the helper has stopped');
+  });
+
+  it('keeps the helper and its model when only a waiting detection is cancelled', async () => {
+    const cancelSlow = new AbortController();
+    const { result, pid } = await startSlow(cancelSlow.signal);
+    const cancelWaiting = new AbortController();
+    const waitingOne = detect(TEXT, cancelWaiting.signal);
+    await sleep(100);
+    cancelWaiting.abort();
+    assert.equal((await waitingOne).name, 'AbortError');
+    await sleep(300);
+    assert.ok(isAlive(pid));
+    cancelSlow.abort();
+    await result;
+    await waitUntil(() => !isAlive(pid), 'the helper has stopped');
   });
 });
 

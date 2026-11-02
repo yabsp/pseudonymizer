@@ -55,7 +55,7 @@ PDFs: uploaded only to the local server (`POST /api/extract/pdf`), extracted by 
 
 - Validate by hand where data enters: requests (origin, `Content-Type`, JSON shape, allowlist patterns for anything reaching a command line or path), model and helper output, files, localStorage (may be missing or old), process exit codes. Never trust "our own" side.
 - Expected problems: a plain-language `setStatus(id, message, true)` with what to do. Operational failures: show, allow retry or cancel, restart helpers next time. Bugs: throw.
-- Server errors are `{ "error": "message" }` with 400/403/404/415/502. API changes are additive; keep client and server in sync and document endpoints in `agents/reference.md`.
+- Server errors are `{ "error": "message" }` with 400/403/404/405/413/415/429/500/501/502. API changes are additive; keep client and server in sync and document endpoints in `agents/reference.md`.
 - No swallowed errors (an empty `catch` needs a comment), no floating promises, child processes always have a timeout or cancel path.
 
 ## Security (non-negotiable)

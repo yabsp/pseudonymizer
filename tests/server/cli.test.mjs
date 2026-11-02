@@ -69,6 +69,20 @@ describe('CLI bridge', () => {
     assert.ok(!noModel.args.includes('--model'));
   });
 
+  it('sends "$" sequences as the preview shows them, such as LaTeX formulas', async () => {
+    const prompt = 'Formel: $$ x^2 $$ und $$\\frac{a}{b}$$. Preis $& oder $` oder $\' oder $1 von [[PERSON_1]].';
+    const res = await server.api('POST', '/api/cli/fake', { prompt, system: 'Costs $$ and $&.' });
+    assert.equal(res.status, 200, res.body);
+    const seen = JSON.parse(res.json().text);
+    assert.equal(seen.stdin, `Costs $$ and $&.\n---\n${prompt}`);
+    assert.equal(seen.system, 'Costs $$ and $&.');
+  });
+
+  it('fills each field of the input only once, so instructions can name "{prompt}" without repeating it', async () => {
+    const res = await server.api('POST', '/api/cli/fake', { prompt: '[[PERSON_1]] {system}', system: 'Answer {prompt}.' });
+    assert.equal(JSON.parse(res.json().text).stdin, 'Answer {prompt}.\n---\n[[PERSON_1]] {system}');
+  });
+
   it('runs every request in a fresh, empty folder that is deleted afterwards', async () => {
     const first = JSON.parse((await server.api('POST', '/api/cli/fake', { prompt: 'a', system: 's' })).json().text);
     const second = JSON.parse((await server.api('POST', '/api/cli/fake', { prompt: 'b', system: 's' })).json().text);

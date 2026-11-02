@@ -1,5 +1,5 @@
 import { addEntry, parseMapping, pseudonymize, restore } from '../core/mapping.js';
-import { buildPrompt, findMappedValues } from '../core/prompt.js';
+import { buildPrompt, findMappedValues, whySendIsBlocked } from '../core/prompt.js';
 import { findSensitiveValues } from '../detection/find-values.js';
 import { DETECTORS } from '../detection/index.js';
 import { callCli } from '../targets/cli.js';
@@ -17,6 +17,8 @@ import { readSettings } from './settings-store.js';
 import { showTab } from './tabs.js';
 
 // textAtLastDetection === null: not detected yet, so steps 2 and 3 stay hidden and Send is locked.
+// detectionProblem === null: the last detection read the whole text; otherwise 'incomplete' or 'listLoaded', which
+// lock sending until detection runs again (whySendIsBlocked).
 // source === null: the text was typed or pasted; otherwise { name, format } of the opened file.
 // document === null: the text box is the text; otherwise a PDF sent as an attachment, { file, markdown, pages,
 // images, formulas, formulasConverted, tables, device, deviceNote? }; file stays in this page only, for converting formulas later.
@@ -25,6 +27,7 @@ const state = {
   mapping: [],
   pseudoText: '',
   textAtLastDetection: null,
+  detectionProblem: null,
   source: null,
   document: null,
   selected: null,
@@ -77,11 +80,12 @@ async function detect(patternsOnly = false) {
 function showFound({ mapping, failed, parts, note, usedModel }) {
   state.mapping = mapping;
   state.textAtLastDetection = sourceText();
+  state.detectionProblem = failed ? 'incomplete' : null;
   showValue(null);
   refresh();
   $('reviewCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
   if (failed) {
-    setStatus('detectStatus', `The local model returned unusable output for ${failed} of ${parts} part(s), so values are probably missing. Check step 2 carefully or try another model.`, true);
+    setStatus('detectStatus', `The local model returned unusable output for ${failed} of ${parts} part(s), so values are probably missing. Sending stays locked: run detection again or choose another model.`, true);
   } else {
     setStatus('detectStatus', `${mapping.length} values to hide${usedModel ? '' : ' (patterns only)'}. Check them in step 2. ${note}`.trim());
   }
@@ -96,19 +100,30 @@ function warnAboutMappedValuesInExtraText() {
 
 const SEND_HINTS = {
   notDetected: 'Run detection in step 1 first.',
-  textChanged: 'Your text changed since detection. Run it again to catch new values.',
+  textChanged: 'Your text changed since detection, so new values would not be hidden. Press "Find sensitive values" again in step 1 before sending.',
+  incomplete: 'Parts of your text could not be checked, so values are probably missing. Press "Find sensitive values" again in step 1 before sending.',
+  listLoaded: 'A saved list replaced the values found. Press "Find sensitive values" again in step 1 before sending, so values missing from the list are found too.',
 };
 
+const whyBlocked = () => whySendIsBlocked({ textAtLastDetection: state.textAtLastDetection, currentText: sourceText(), detectionProblem: state.detectionProblem });
+
+/** Everything that takes the text out of the app: Send, Copy message and Save as file. */
 function updateSendState() {
-  const hasDetected = state.textAtLastDetection !== null;
-  $('sendBtn').disabled = !hasDetected;
-  if (!hasDetected) return setStatus('sendStatus', SEND_HINTS.notDetected);
-  if (state.textAtLastDetection !== sourceText()) return setStatus('sendStatus', SEND_HINTS.textChanged, true);
+  const blocked = whyBlocked();
+  for (const button of [$('sendBtn'), $('saveFileBtn'), document.querySelector('[data-copy="prompt"]')]) button.disabled = blocked !== null;
+  if (blocked) return setStatus('sendStatus', SEND_HINTS[blocked], blocked !== 'notDetected');
   const isShowingHint = Object.values(SEND_HINTS).includes($('sendStatus').textContent);
   if (isShowingHint) setStatus('sendStatus', '');
 }
 
+/** Checked again on every click, as the text may have changed in a way that didn't update the buttons. */
+function isBlocked() {
+  updateSendState();
+  return whyBlocked() !== null;
+}
+
 async function send() {
+  if (isBlocked()) return;
   const prompt = currentPrompt();
   if (!prompt) return setStatus('sendStatus', 'Nothing to send yet.', true);
   try {
@@ -199,7 +214,7 @@ function removeDocument() {
 }
 
 function saveAsFile() {
-  if (state.textAtLastDetection === null) return setStatus('sendStatus', SEND_HINTS.notDetected, true);
+  if (isBlocked()) return;
   // A neutral file name: the original one often contains a name ("Befund_Hans_Muster.pdf").
   downloadFile(state.document ? 'pseudonymized-document' : 'pseudonymized-text', 'md', state.pseudoText, 'text/markdown');
   setStatus('sendStatus', 'Saved part 1 to your download folder. After uploading it to a chat, paste the answer under "Already have an answer" to restore the names.');
@@ -321,8 +336,8 @@ function clearValues() {
 async function importValues(file) {
   try {
     state.mapping = parseMapping(JSON.parse(await file.text()));
-    state.textAtLastDetection = sourceText();
-    setStatus('valuesStatus', `Loaded ${state.mapping.length} values from ${file.name}.`);
+    state.detectionProblem = 'listLoaded';
+    setStatus('valuesStatus', `Loaded ${state.mapping.length} values from ${file.name}. You can restore an answer with them now; to send, find the sensitive values again in step 1.`);
     refresh();
   } catch (err) {
     setStatus('valuesStatus', `Could not load the list from ${file.name}: ${err.message}`, true);
@@ -385,6 +400,7 @@ export function initWorkflow() {
   $('pasteAnswerBtn').addEventListener('click', openAnswerCard);
   $('reassembleBtn').addEventListener('click', reassemble);
   document.querySelectorAll('[data-copy]').forEach((btn) => btn.addEventListener('click', () => {
+    if (btn.dataset.copy === 'prompt' && isBlocked()) return;
     const label = btn.textContent;
     const source = btn.dataset.copy === 'prompt' ? currentPrompt() : $('final').textContent;
     navigator.clipboard.writeText(source).then(() => {

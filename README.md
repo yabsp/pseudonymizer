@@ -35,7 +35,9 @@ You also need one AI tool, installed and logged in on your computer: Claude Code
 2. **Check what will be sent.** The hidden parts are highlighted. Click one to see what it stands for, or to keep it
    visible. Anything missing can be added under "Edit values", where you can also save the list and load it again.
 3. **Send.** Add your question if you like; it is sent exactly as you type it, so leave names out of it. "Save as
-   file" saves the pseudonymized version instead, for uploading to any chat yourself.
+   file" saves the pseudonymized version instead, for uploading to any chat yourself. Send, Copy and Save stay locked
+   until the sensitive values were found in exactly this text: after changing the text, opening another file or
+   loading a saved list, press "Find sensitive values" again.
 4. **Answer.** The answer comes back with the original values put back in. An answer from another chat can be
    pasted there too ("Already have an answer").
 

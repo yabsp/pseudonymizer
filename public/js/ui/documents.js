@@ -44,7 +44,7 @@ function describeState(entry) {
   if (detection === 'running') return 'Finding sensitive values';
   if (detection === 'done') {
     const { mapping, failed } = entry.found;
-    const warning = failed ? ' Some parts gave unusable results, check carefully.' : '';
+    const warning = failed ? ' Some parts gave unusable results, so it can only be sent after finding the values again.' : '';
     return `Ready to review, ${mapping.length} values to hide.${warning}${entry.opened ? ' Opened.' : ''}`;
   }
   if (detection?.error) return `Converted, but finding the values failed: ${detection.error} Open it and find them again.`;
