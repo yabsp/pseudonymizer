@@ -1,13 +1,14 @@
 import { callServer } from '../server-api.js';
 import { $, setStatus } from './dom.js';
 
-const SETTING_FIELDS = ['detector', 'glinerModel', 'glinerThreshold', 'presidioLanguage', 'accelerator', 'ollamaUrl', 'ollamaModel', 'cliAdapter', 'model'];
+// The settings that are form fields with a value; "ocr" is a checkbox next to them.
+const SETTING_FIELDS = ['threshold', 'cliAdapter', 'model'];
 const BROWSER_COPY_KEY = 'pseudo-settings';
 const SAVE_DELAY_MS = 400;
 
 export function readSettings() {
   const settings = Object.fromEntries(SETTING_FIELDS.map((field) => [field, $(field).value]));
-  return { ...settings, useRegex: $('useRegex').checked, notify: $('notify').checked };
+  return { ...settings, ocr: $('ocr').checked };
 }
 
 /** settings.json through the server; the browser copy only when the server can't be reached. */
@@ -24,10 +25,16 @@ export async function readSavedSettings() {
   }
 }
 
+/** Shows saved settings in the form. A sensitivity saved by an earlier version ("glinerThreshold") still counts. */
 export function applySavedSettings(saved) {
-  for (const field of SETTING_FIELDS) if (saved[field] !== undefined) $(field).value = saved[field];
-  $('useRegex').checked = saved.useRegex !== false;
-  $('notify').checked = saved.notify === true;
+  const values = { ...saved, threshold: saved.threshold ?? saved.glinerThreshold };
+  for (const field of SETTING_FIELDS) {
+    if (typeof values[field] !== 'string') continue;
+    $(field).value = values[field];
+    // A select keeps its default when the saved value is not one of its choices.
+    if ($(field).tagName === 'SELECT' && $(field).value !== values[field]) $(field).selectedIndex = [...$(field).options].findIndex((o) => o.defaultSelected);
+  }
+  $('ocr').checked = saved.ocr !== false;
 }
 
 async function saveSettings() {
@@ -48,5 +55,5 @@ async function saveSettings() {
 let saveTimer;
 export function scheduleSave() {
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(saveSettings, SAVE_DELAY_MS);
+  saveTimer = setTimeout(() => void saveSettings(), SAVE_DELAY_MS);
 }

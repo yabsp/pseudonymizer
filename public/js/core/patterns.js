@@ -47,6 +47,35 @@ const CAPITALS_BEFORE_SPACE = /^\p{Lu}{1,4} /u;
 // identify anyone, and the question is often about them.
 const DIAGNOSIS_CODE = /^(?:ICD(?:-10)?:? ?)?[A-TV-Z]\d{2}(?:\.\d{1,4})?$/;
 export const isDiagnosisCode = (value) => DIAGNOSIS_CODE.test(value);
+
+// A reference to a law or to a published decision, which identifies nobody and is often what the question is about:
+// - "Art.", "Artikel" or "§" and a number with an optional letter ("336b"), then any of: "Abs.", "al.", "cpv.",
+//   "para.", "Ziff.", "ch.", "n.", "lit.", "let.", "lett.", "und", "et", "e", "f.", "ff.", "bis", "ter", a number or
+//   a single letter, and at the end optionally the law's short name in capitals or mixed case ("Art. 336b Abs. 1 OR",
+//   "art. 146 cpv. 1 e 2 CP", "§ 12 Abs. 3 StG", "Art. 9 Abs. 2 lit. m StHG");
+// - "BGE", "ATF" or "DTF", the volume, the part in Roman numerals and the page, optionally "E.", "consid." or
+//   "cons." and its number ("DTF 143 IV 302 consid. 1.3", "BGE 140 III 115").
+const LEGAL_REFERENCE = /^(?:(?:Art\.?|Artikel|§{1,2})\s*\d+[a-z]*(?:\s+(?:Abs\.|al\.|cpv\.|para\.|par\.|Ziff\.|ch\.|n\.|lit\.|let\.|lett\.|und|et|e|ff?\.|bis|ter|\d+[a-z]*|[a-z]))*(?:\s+\p{Lu}[\p{L}]{1,9})?|(?:BGE|ATF|DTF)\s+\d{2,3}\s+[IV]+[a-z]?\s+\d+(?:\s+(?:E\.|consid\.|cons\.)\s*\d[\d.]*[a-z]?)?)$/iu;
+export const isLegalReference = (value) => LEGAL_REFERENCE.test(value.trim());
+
+const DIGITS = /\p{N}/gu;
+const HAS_WHITESPACE = /\s/u;
+const digitCount = (value) => (value.match(DIGITS) || []).length;
+// What a value of a category must have when a model reports it: models also give such labels to ordinary words
+// ("postfix" as an e-mail address, "ISO/IEC 27001 A.5.18" as an API key). The patterns find the real ones anyway.
+const MIN_PHONE_DIGITS = 5;
+const MIN_SECRET_LENGTH = 6;
+const SHAPES = {
+  EMAIL: (value) => value.includes('@'),
+  PHONE: (value) => digitCount(value) >= MIN_PHONE_DIGITS,
+  IP: (value) => digitCount(value) > 0,
+  DATE: (value) => digitCount(value) > 0,
+  ID: (value) => digitCount(value) > 0,
+  CARD: (value) => digitCount(value) > 0,
+  SECRET: (value) => value.length >= MIN_SECRET_LENGTH && !HAS_WHITESPACE.test(value),
+};
+/** False if the value can't be of the category, whatever a model said. */
+export const hasShapeOf = (category, value) => !Object.hasOwn(SHAPES, category) || SHAPES[category](value);
 const isIdAfterLabel = (candidate) => (!candidate.includes(' ') || CAPITALS_BEFORE_SPACE.test(candidate)) && !isDiagnosisCode(candidate);
 
 // A password-like value: a character that is not a letter, or a capital after the first character ("kL9#",
@@ -81,7 +110,7 @@ const hasNineDigits = (candidate) => candidate.replace(NOT_A_DIGIT, '').length >
 
 // Each pattern finds values of one category; isValid (optional) confirms a match. Patterns listed earlier
 // win when two find the same text, so the more specific ones come first.
-export const PATTERNS = [
+const PATTERNS = [
   // EMAIL: a local part of letters, digits, "_", ".", "+" or "-", then "@", a domain label of letters,
   // digits, "_" or "-", and one or more ".label" parts ("anna.meier@example.co.uk").
   { category: 'EMAIL', re: /[\w.+-]+@[\w-]+(\.[\w-]+)+/g },
@@ -141,6 +170,10 @@ export const PATTERNS = [
   // (lookbehind), as databases and logs write it: 3 or more letters, digits, "_", "." or "-", then the closing
   // quote (lookahead): 'for user "praxis_app"', "utente 'mrossi'".
   { category: 'USERNAME', re: /(?<=\b(?:user|Benutzer|utente|utilisateur|role)[ \t]+["'«])[\w.-]{3,}(?=["'»])/giu },
+  // The name of a service or administrator account, as system administrators form them: "svc", "srv", "sa",
+  // "adm", "admin" or a tier ("t0", "t1", "t2"), then "_" or "-", then 3 or more lower-case letters, digits,
+  // "_", "." or "-" ("svc_backup", "adm-lzbinden", "t0-rkaelin"); not inside a longer name.
+  { category: 'USERNAME', re: /(?<![\w.-])(?:svc|srv|sa|adm|admin|t[0-2])[_-][a-z0-9][a-z0-9_.-]{2,}(?![\w-])/g },
   // The name of a computer in a Windows network path: right after "\\" at the start of the path (lookbehind,
   // not after another "\"), letters, digits, "_", "." or "-" up to the next "\" ("\\nas01\backup",
   // "\\srv-med01\lettere").
@@ -204,8 +237,12 @@ export const PATTERNS = [
   //   or "_number" at the end of a key in code
   //   ("client_id=88213"); then up to 6 characters that are no letter or digit (": ", " # ", "."), and
   //   optionally "is", "ist", "est", "è" or "lautet" and a space ("code is REF-1");
-  // - or "#", "N.", "N°" or "Nº" and optional spaces ("Fattura N. 2026/0458", "permis B n° 1234567").
+  // - or "#", "N.", "N°" or "Nº" and optional spaces ("Fattura N. 2026/0458", "permis B n° 1234567"); a "#" only
+  //   after other text on its line, as "## 3 Results" is a heading with its number, not an ID.
   // The ID itself, either
+  // - a number with apostrophes between its thousands ("Minute n° 8'412"), or
+  // - a number written in 3 to 6 groups of digits with single spaces ("Versichertennummer: 80756 0001 2345 678"),
+  //   which the phone pattern would otherwise claim, or
   // - 1 to 4 letters and groups of 2 or more digits after single spaces, as courts write case numbers
   //   ("ZK 26 318"; kept only if the letters are capitals), but not a label itself ((?!...), so
   //   "Patient-ID 7781" gives "7781"), and not followed by ".", "/" or "-" and a digit (so "N° AVS
@@ -213,7 +250,7 @@ export const PATTERNS = [
   // - letters or digits, possibly joined by ".", "/", "_" or "-" ("4471", "2026/LT/0457", "123.456.789-0",
   //   "4A_123/2026"), with at least one digit (lookahead (?=...)), so "Ticket: open" stays.
   // A full stop or comma after it is not part of it. Diagnosis codes ('code="M54.5"') stay, see isIdAfterLabel.
-  { category: 'ID', re: /(?<=(?:\b(?:ID|No|Nr|Number|Numéro|Numero|Nummer|Ref|Réf|Referenz|Référence|Riferimento|Dossier|Akte|Aktenzeichen|Ticket|Case|Incident|Claim|Code|Group|Member|Policy|Police|Polizza|VIN|(?<!\/)DL|License|Licence|Permis|Account|Konto|Identifier|NPI|MRN|PID|S\/N|SN|Serial|Patient|Patientin|patiente|paziente|caso|matricule|matricola|Matrikel|personale|GLN)|_(?:ID|No|Nr|Number)|\p{Ll}(?:nummer|nr))\b[^\n\p{L}\p{N}]{0,6}(?:(?:is|ist|est|è|lautet)[ \t]+)?|(?:#|\bN[.°º])[ \t]*)(?:(?!(?:ID|No|Nr)\b)\p{L}{1,4}(?: \p{N}{2,})+(?![\p{L}\p{N}]|[.\/-]\p{N})|(?=[\p{L}\p{N}./_-]*\p{N})[\p{L}\p{N}]+(?:[./_-][\p{L}\p{N}]+)*)/giu, isValid: isIdAfterLabel },
+  { category: 'ID', re: /(?<=(?:\b(?:ID|No|Nr|Number|Numéro|Numero|Nummer|Ref|Réf|Referenz|Référence|Riferimento|Dossier|Akte|Aktenzeichen|Ticket|Case|Incident|Claim|Code|Group|Member|Policy|Police|Polizza|VIN|(?<!\/)DL|License|Licence|Permis|Account|Konto|Identifier|NPI|MRN|PID|S\/N|SN|Serial|Patient|Patientin|patiente|paziente|caso|matricule|matricola|Matrikel|personale|GLN)|_(?:ID|No|Nr|Number)|\p{Ll}(?:nummer|nr))\b[^\n\p{L}\p{N}]{0,6}(?:(?:is|ist|est|è|lautet)[ \t]+)?|(?:(?<=[^\s#][ \t]*)#|\bN[.°º])[ \t]*)(?:\p{N}{1,3}(?:['’]\p{N}{3})+(?![\p{L}\p{N}])|\p{N}{3,}(?: \p{N}{2,}){2,5}(?![\p{L}\p{N}]|[.\/-]\p{N})|(?!(?:ID|No|Nr)\b)\p{L}{1,4}(?: \p{N}{2,})+(?![\p{L}\p{N}]|[.\/-]\p{N})|(?=[\p{L}\p{N}./_-]*\p{N})[\p{L}\p{N}]+(?:[./_-][\p{L}\p{N}]+)*)/giu, isValid: isIdAfterLabel },
   // A reference code: 1 or more capital letters and optional digits, optionally more parts of capitals or
   // digits, then a "-" and a part of at least 4 digits, then optionally more such parts ("INC-20419",
   // "CONF-2026-X8891", "HC-2026-001942", "REF-99482-XYZ", patient numbers such as "P-104233", case numbers such
@@ -354,8 +391,10 @@ const FIELD_LABELS = [
   { category: 'ADDRESS', words: ['adresse', 'wohnadresse', 'privatadresse', 'anschrift', 'strasse', 'straße', 'wohnort', 'domizil', 'plz/ort', 'plz ort', 'address', 'street', 'city', 'domicile', 'rue', 'localité', 'npa/localité', 'indirizzo', 'domicilio', 'residenza', 'località', 'cap/località'] },
   { category: 'EMAIL', words: ['e-mail', 'email', 'mail', 'courriel', 'posta elettronica'] },
   { category: 'PHONE', words: ['telefon', 'tel.', 'tel', 'phone', 'mobile', 'mobil', 'natel', 'handy', 'téléphone', 'portable', 'telefono', 'cellulare'] },
-  { category: 'ID', words: ['ahv', 'avs', 'ssn', 'social security', 'versichertennummer', 'versicherten-nr', 'versicherungsnummer', 'iban', 'konto', 'compte', 'conto', 'account number', 'patienten-id', 'patientennummer', 'patienten-nr', 'pid', 'mrn', 'personalnummer', 'personal-nr', 'matricule', 'matricola', 'kundennummer', 'kunden-nr', 'customer id', 'customer number', 'policy', 'police', 'polizza', 'policennummer', 'documento', 'pass', 'passport', 'passeport', 'passaporto', 'ausweis', 'identitätskarte', "carte d'identité", "carta d'identità", 'kennzeichen', 'plaque', 'targa', 'license plate', 'fallnummer', 'fall-nr', 'dossier', 'aktenzeichen', 'case number', 'subject id', 'subject no', 'subject number', 'subject-id', 'randomisation no', 'randomization no', 'randomisation number', 'randomization number', 'screening no', 'screening number', 'probanden-nr', 'probandennummer', 'teilnehmer-nr', 'teilnehmernummer', 'studien-id', 'numéro de sujet', 'n° de sujet', 'numero soggetto', 'id soggetto'] },
+  { category: 'ID', words: ['ahv', 'avs', 'ssn', 'social security', 'versichertennummer', 'versicherten-nr', 'versicherungsnummer', 'iban', 'kontonummer', 'konto-nr', 'kontonr', 'account number', 'numéro de compte', 'numero di conto', 'patienten-id', 'patientennummer', 'patienten-nr', 'pid', 'mrn', 'personalnummer', 'personal-nr', 'matricule', 'matricola', 'kundennummer', 'kunden-nr', 'customer id', 'customer number', 'policy', 'police', 'polizza', 'policennummer', 'documento', 'pass', 'passport', 'passeport', 'passaporto', 'ausweis', 'identitätskarte', "carte d'identité", "carta d'identità", 'kennzeichen', 'plaque', 'targa', 'license plate', 'fallnummer', 'fall-nr', 'dossier', 'aktenzeichen', 'case number', 'subject id', 'subject no', 'subject number', 'subject-id', 'randomisation no', 'randomization no', 'randomisation number', 'randomization number', 'screening no', 'screening number', 'probanden-nr', 'probandennummer', 'teilnehmer-nr', 'teilnehmernummer', 'studien-id', 'numéro de sujet', 'n° de sujet', 'numero soggetto', 'id soggetto'] },
   { category: 'USERNAME', words: ['username', 'user name', 'benutzer', 'benutzername', 'login', 'utente', 'utilisateur', 'nom d’utilisateur'] },
+  // A column of accounts, of a bank (numbers) or of a computer system (login names): decided cell by cell.
+  { category: 'ACCOUNT', words: ['konto', 'konten', 'dienstkonto', 'servicekonto', 'benutzerkonto', 'account', 'accounts', 'service account', 'compte', 'comptes', 'conto', 'conti'] },
 ];
 // Markdown emphasis and a closing ":" around a label ("**Name:**").
 const LABEL_DECORATION = /^[*_\s]+|[*_:\s]+$/g;
@@ -382,6 +421,20 @@ const CELL_CHECKS = {
   DATE: (cell) => HAS_DIGIT.test(cell),
   ID: (cell) => HAS_DIGIT.test(cell) && cell.length >= MIN_ID_LENGTH,
 };
+// A login name: lower-case letters and digits with at least one digit, "_", "." or "-" in it ("svc_backup",
+// "m.keller", "admin2"), so the plain words of a chart of accounts ("kasse") stay.
+const LOGIN_NAME = /^(?=.*[\d._-])[a-z0-9][a-z0-9._-]{2,}$/;
+// What separates several accounts in one cell: "," or ";" and spaces.
+const ACCOUNT_SEPARATOR = /[,;]\s*/;
+
+/** The accounts in a cell of an account column: numbers as IDs, login names as user names, anything else stays. */
+function accountsIn(cell) {
+  return cell.split(ACCOUNT_SEPARATOR).map((part) => part.trim()).flatMap((part) => {
+    if (LOGIN_NAME.test(part)) return [{ text: part, category: 'USERNAME' }];
+    return HAS_DIGIT.test(part) ? [{ text: part, category: 'ID' }] : [];
+  });
+}
+
 const isCellValue = (cell, category) => HAS_CONTENT.test(cell) && (CELL_CHECKS[category] ?? (() => true))(cell);
 
 // Quotes around a CSV cell ("\"Muster, Hans\"").
@@ -416,9 +469,11 @@ function cellsOf(line, separator) {
 
 const separatorCount = (line, separator) => splitCells(line, separator).length - 1;
 
-/** The tables in a text: runs of 2 or more lines with the same number of cells, each as a list of rows. */
-function tablesIn(text) {
-  const lines = text.split('\n');
+/**
+ * The tables in the lines of a text, from top to bottom: runs of 2 or more lines with the same number of cells,
+ * each as { rows, start, end } with the indexes of its first line and of the line after its last.
+ */
+function tablesIn(lines) {
   const tables = [];
   for (const separator of CELL_SEPARATORS) {
     const isRow = (line) => separatorCount(line, separator) >= (MIN_SEPARATORS[separator] ?? 1);
@@ -428,11 +483,23 @@ function tablesIn(text) {
       let end = i + 1;
       while (end < lines.length && isRow(lines[end]) && separatorCount(lines[end], separator) === count) end++;
       const rows = lines.slice(i, end).map((line) => cellsOf(line, separator)).filter((cells) => !cells.every((cell) => MARKDOWN_RULE.test(cell)));
-      if (rows.length >= 2) tables.push(rows);
+      if (rows.length >= 2) tables.push({ rows, start: i, end });
       i = end - 1;
     }
   }
-  return tables;
+  return tables.sort((a, b) => a.start - b.start);
+}
+
+// The marker between two pages of a document read from a PDF: "--- Page 2 ---".
+const PAGE_MARKER = /^--- Page \d+ ---$/;
+// A running header and footer are the only other lines between the two parts of a table that continues on the
+// next page.
+const MAX_LINES_AROUND_PAGE_BREAK = 4;
+
+/** True if only a page break (and the header and footer around it) lies between the lines from and to. */
+function isPageBreakBetween(lines, from, to) {
+  const between = lines.slice(from, to).map((line) => line.trim()).filter(Boolean);
+  return between.some((line) => PAGE_MARKER.test(line)) && between.length <= MAX_LINES_AROUND_PAGE_BREAK + 1;
 }
 
 /**
@@ -440,16 +507,20 @@ function tablesIn(text) {
  * "Geburtsdatum" or "IBAN" in a CSV export or a Markdown table, and the cell next to such a label in a form
  * laid out as a table ("| Geburtsdatum | 14.02.1961 |").
  */
-export function detectInTables(text) {
+function detectInTables(text) {
   const found = [];
-  // The column labels of the last table with labels, by its number of columns: a table continued after a page
-  // break comes without them, and PDF extraction takes its first row for the header.
-  const labelsByWidth = new Map();
-  for (const [first, ...rest] of tablesIn(text)) {
+  const lines = text.split('\n');
+  // The last table with column labels: a table that goes on after a page break comes without them. Only then are
+  // they used again; another table that happens to have as many columns has its own meaning.
+  let labelled = null;
+  for (const { rows: [first, ...rest], start, end } of tablesIn(lines)) {
     let columns = first.map(categoryOfLabel);
     let [header, rows] = [first, rest];
-    if (columns.some(Boolean)) labelsByWidth.set(first.length, columns);
-    else if (labelsByWidth.has(first.length)) [columns, header, rows] = [labelsByWidth.get(first.length), null, [first, ...rest]];
+    if (columns.some(Boolean)) labelled = { columns, end };
+    else if (labelled && labelled.columns.length === first.length && isPageBreakBetween(lines, labelled.end, start)) {
+      [columns, header, rows] = [labelled.columns, null, [first, ...rest]];
+      labelled.end = end;
+    }
     for (const row of header ? [header, ...rows] : rows) {
       if (row !== header && row.length === columns.length) row.forEach((cell, i) => columns[i] && found.push({ text: cell, category: columns[i] }));
       // a header row ("| Name | Geburtsdatum |") has labels on both sides, a form row a label and a value
@@ -457,7 +528,8 @@ export function detectInTables(text) {
       if (rowLabel) found.push({ text: row[1], category: rowLabel });
     }
   }
-  return found.filter(({ text: cell, category }) => isCellValue(cell, category))
+  return found.flatMap((value) => (value.category === 'ACCOUNT' ? accountsIn(value.text) : [value]))
+    .filter(({ text: cell, category }) => isCellValue(cell, category))
     .map((value) => (value.category === 'INITIALS' ? { ...value, category: 'PERSON' } : value));
 }
 
@@ -498,7 +570,7 @@ const TRAILING_PUNCTUATION = /[.-]+$/;
 const COURT_BEFORE = /(?:\p{L}*gericht|Tribunal|Tribunale|Pretura|Cour|Corte|Justice de paix|Giudicatura di pace)(?: [\p{Ll}'’]+){0,3} $/u;
 
 /** Swiss towns named alone, without a postal code ("aus Hochdorf", "Ufficio dei registri, Mendrisio"). */
-export function detectPlaces(text) {
+function detectPlaces(text) {
   const words = [...text.matchAll(PLACE_WORD)].map((m) => ({ start: m.index, end: m.index + m[0].replace(TRAILING_PUNCTUATION, '').length }));
   const found = [];
   for (let i = 0; i < words.length; i++) {

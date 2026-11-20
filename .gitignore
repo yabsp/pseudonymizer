@@ -1,24 +1,22 @@
-# User settings and the prompt files saved from the Prompts tab
+# Your settings and the texts saved from Settings > Advanced
 settings.json
 prompts/*.md
 prompts/*.txt
 !prompts/*.default.*
 !prompts/README.md
 
-# Local Python environments (.venv-xpu and similar for trying other PyTorch builds)
+# What "npm run setup" and "npm run build" put into the project folder (BUILDING.md)
+node_modules/
+models/
+.cache/
+dist/
+
+# Left from versions before 0.2 (Python environments, their desktop build); safe to delete
+.venv
 .venv/
 .venv-*/
 __pycache__/
-# Models and download caches from "npm run setup"
-models/
-.cache/
+build/
 
 # other
 .claude
-
-# Desktop build
-node_modules/
-build/
-dist/
-# a .venv link (e.g. in a git worktree) is not matched by ".venv/"
-.venv

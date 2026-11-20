@@ -1,12 +1,11 @@
 import { PDF_IMPORTER } from './pdf.js';
 import { TEXT_IMPORTER } from './text.js';
 
-// One importer per document format: { label, extensions, job, read(file, options) -> { text, document? } }, with options
-// { signal, progress } and format-specific ones (formulas for PDF). document (optional) holds facts about a
-// document that is sent as an attachment: { pages, images, formulas, formulasConverted, tables }.
-// job is how the Documents tab converts the format on the server: { format, contentType, maxBytes }.
-// A new format (e.g. Word) is one file and one entry here, plus a pipeline in server/jobs.js.
-export const IMPORTERS = [TEXT_IMPORTER, PDF_IMPORTER];
+// One importer per document format: { label, extensions, read(file, options) -> { text, document? } }, with
+// options { signal, progress } and format-specific ones (ocrLanguages for PDF). document (optional) holds facts
+// about a document that is sent as an attachment: { pages, images, scannedPages, recognizedPages, unreadPages }.
+// Every importer reads the file in this page; nothing is uploaded. A new format is one file and one entry here.
+const IMPORTERS = [TEXT_IMPORTER, PDF_IMPORTER];
 
 // The extension of a file name: the characters after the last ".", e.g. "pdf" in "Bericht.v2.PDF".
 const EXTENSION = /\.([^.]+)$/;

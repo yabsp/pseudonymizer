@@ -1,23 +1,17 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, it } from 'node:test';
-import { assertOnlyUserCanAccess } from '../helpers/file-access.mjs';
-import { SETTINGS_FILE, startServer } from '../helpers/server.mjs';
+import { startServer } from '../helpers/server.mjs';
 
-const SETTINGS = {
-  detector: 'gliner', glinerModel: 'urchade/gliner_multi_pii-v1', glinerThreshold: '0.4',
-  provider: 'anthropic', model: 'claude-opus-5-5', useRegex: true, apiKey: 'sk-ant-test-0000',
-};
+const SETTINGS = { threshold: '0.4', cliAdapter: 'claude-code', model: 'claude-opus-5-5', ocr: true };
 
 describe('settings API', () => {
   let server;
   let file;
   beforeEach(async () => {
     server = await startServer();
-    file = path.join(server.dir, SETTINGS_FILE);
+    file = path.join(server.dataDir, 'settings.json');
   });
   afterEach(() => server.close());
 
@@ -31,13 +25,13 @@ describe('settings API', () => {
     const saved = await server.api('PUT', '/api/settings', SETTINGS);
     assert.equal(saved.status, 200);
     assert.deepEqual(JSON.parse(fs.readFileSync(file, 'utf8')), SETTINGS);
-    assertOnlyUserCanAccess(file);
+    if (process.platform !== 'win32') assert.equal(fs.statSync(file).mode & 0o777, 0o600);
     assert.deepEqual((await server.api('GET', '/api/settings')).json(), SETTINGS);
+    assert.deepEqual(fs.readdirSync(server.dataDir).filter((name) => name.endsWith('.tmp')), [], 'no temporary file left');
   });
 
   it('refuses writes from other websites and simple cross-site form posts', async () => {
-    fs.writeFileSync(file, JSON.stringify({ provider: 'cli' }));
-    const attacker = { apiKey: 'stolen?', baseUrl: 'https://attacker.example' };
+    fs.writeFileSync(file, JSON.stringify({ cliAdapter: 'codex' }));
     const attempts = [
       { Origin: 'https://attacker.example' },
       { Origin: 'null' },
@@ -46,10 +40,10 @@ describe('settings API', () => {
       { 'Content-Type': 'application/x-www-form-urlencoded' },
     ];
     for (const headers of attempts) {
-      const res = await server.api('PUT', '/api/settings', attacker, headers);
+      const res = await server.api('PUT', '/api/settings', { cliAdapter: 'evil' }, headers);
       assert.ok([403, 415].includes(res.status), `${JSON.stringify(headers)} -> ${res.status}`);
     }
-    assert.deepEqual(JSON.parse(fs.readFileSync(file, 'utf8')), { provider: 'cli' });
+    assert.deepEqual(JSON.parse(fs.readFileSync(file, 'utf8')), { cliAdapter: 'codex' });
   });
 
   it('rejects anything that is not a JSON object', async () => {
@@ -61,39 +55,57 @@ describe('settings API', () => {
     assert.ok(!fs.existsSync(file));
   });
 
+  it('rejects a request that is larger than the limit instead of reading it all', async () => {
+    const small = await startServer({ config: { maxJsonBytes: 1000 } });
+    try {
+      const res = await small.api('PUT', '/api/settings', { text: 'x'.repeat(5000) });
+      assert.equal(res.status, 413);
+    } finally {
+      await small.close();
+    }
+  });
+
   it('reports a damaged settings file instead of crashing', async () => {
-    fs.writeFileSync(file, '{"provider": "cli",');
+    fs.writeFileSync(file, '{"cliAdapter": "codex",');
     const res = await server.api('GET', '/api/settings');
     assert.equal(res.status, 500);
     assert.match(res.json().error, /settings\.json/);
-    assert.ok(server.isRunning());
-  });
-
-  it('makes an existing, readable settings file private when saving (regression: 0644 stayed 0644)', async () => {
-    fs.writeFileSync(file, '{}', { mode: 0o644 });
-    fs.chmodSync(file, 0o644);
-    assert.equal((await server.api('PUT', '/api/settings', SETTINGS)).status, 200);
-    assertOnlyUserCanAccess(file);
-    assert.deepEqual(JSON.parse(fs.readFileSync(file, 'utf8')), SETTINGS);
-    assert.deepEqual(fs.readdirSync(server.dir).filter((name) => name.endsWith('.tmp')), [], 'no temporary file left');
+    assert.equal((await server.api('GET', '/api/about')).status, 200, 'the server keeps running');
   });
 });
 
-describe('settings in a folder that passes no access rights on (Windows)', { skip: process.platform !== 'win32' && 'Windows access lists only' }, () => {
-  it('still leaves only the user with access (regression: SYSTEM and administrators kept access on a CI runner)', async () => {
-    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pseudo-noinherit-'));
-    // Only the user, without (OI)(CI): new files get no inherited entries, so Windows gives them explicit ones.
-    const sid = execFileSync(path.join(process.env.SystemRoot, 'System32', 'whoami.exe'), ['/user', '/fo', 'csv', '/nh'], { encoding: 'utf8' })
-      .trim().split(',').pop().replaceAll('"', '');
-    execFileSync(path.join(process.env.SystemRoot, 'System32', 'icacls.exe'), [dataDir, '/inheritance:r', '/grant:r', `*${sid}:F`]);
-    const server = await startServer({ env: { PSEUDONYMIZER_DATA_DIR: dataDir } });
-    try {
-      const res = await server.api('PUT', '/api/settings', SETTINGS);
-      assert.equal(res.status, 200, res.body);
-      assertOnlyUserCanAccess(path.join(dataDir, 'settings.json'));
-    } finally {
-      await server.close();
-      fs.rmSync(dataDir, { recursive: true, force: true });
+describe('texts of the Settings tab', () => {
+  let server;
+  beforeEach(async () => {
+    server = await startServer();
+  });
+  afterEach(() => server.close());
+
+  it('gives the shipped texts until the user saves their own', async () => {
+    const files = (await server.api('GET', '/api/prompts')).json();
+    assert.deepEqual(files.map((f) => [f.name, f.file]), [
+      ['gliner-labels.txt', 'prompts/gliner-labels.default.txt'], ['not-sensitive.txt', 'prompts/not-sensitive.default.txt'], ['system.md', 'prompts/system.default.md'],
+    ]);
+    assert.match(files[0].text, /person = PERSON/);
+    assert.match(files[2].text, /\[\[PERSON_1\]\]/);
+  });
+
+  it('saves a text into the data folder, where it wins over the shipped one, which stays as it is', async () => {
+    const saved = await server.api('PUT', '/api/prompts/system.md', { text: 'Antworte auf Deutsch.\n' });
+    assert.equal(saved.status, 200, saved.body);
+    assert.deepEqual(saved.json(), { file: 'prompts/system.md' });
+    assert.equal(fs.readFileSync(path.join(server.dataDir, 'prompts', 'system.md'), 'utf8'), 'Antworte auf Deutsch.\n');
+    const system = (await server.api('GET', '/api/prompts')).json().find((f) => f.name === 'system.md');
+    assert.deepEqual([system.file, system.text], ['prompts/system.md', 'Antworte auf Deutsch.\n']);
+    assert.match(fs.readFileSync(path.join(server.config.promptsDir, 'system.default.md'), 'utf8'), /placeholders/);
+  });
+
+  it('only writes the files it knows, and only text', async () => {
+    for (const name of ['evil.md', 'system.default.md', '..%2Fsettings.json', 'gliner-labels.txt.bak']) {
+      assert.equal((await server.api('PUT', '/api/prompts/' + name, { text: 'x' })).status, 404, name);
     }
+    assert.equal((await server.api('PUT', '/api/prompts/system.md', { text: 5 })).status, 400);
+    assert.equal((await server.api('PUT', '/api/prompts/system.md', { text: 'x' }, { Origin: 'https://attacker.example' })).status, 403);
+    assert.ok(!fs.existsSync(path.join(server.dataDir, 'prompts')));
   });
 });

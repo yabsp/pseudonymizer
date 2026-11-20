@@ -1,7 +1,6 @@
 import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { COMMAND_SEARCH_PATH, WINDOWS_COMMAND_EXTENSIONS, WINDOWS_TOOLS_DIR } from './config.js';
 
 const IS_WINDOWS = process.platform === 'win32';
 const STOP_NOW_TIMEOUT_MS = 5000;
@@ -13,15 +12,18 @@ const BATCH_FILE = /\.(?:cmd|bat)$/i;
 
 const quoteForWindows = (arg) => (NEEDS_WINDOWS_QUOTES.test(arg) ? `"${arg.replaceAll('"', '""')}"` : arg);
 const isFile = (file) => fs.statSync(file, { throwIfNoEntry: false })?.isFile() ?? false;
+// Windows' own tools are started from here, not looked up on PATH, where e.g. Git for Windows puts others first.
+const windowsTool = (name) => path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', name);
 
 /**
  * Where Windows would find the command, as cmd.exe does: in each folder on PATH (or as given, if it is a path),
  * as written and with each extension in PATHEXT. null if it isn't installed.
  */
-export function findWindowsCommand(command) {
+function findWindowsCommand(command) {
   const isPath = command.includes('/') || command.includes('\\');
-  const folders = isPath ? [''] : COMMAND_SEARCH_PATH;
-  const names = path.extname(command) ? [command] : WINDOWS_COMMAND_EXTENSIONS.map((ext) => command + ext);
+  const folders = isPath ? [''] : (process.env.PATH || '').split(path.delimiter).filter(Boolean);
+  const extensions = (process.env.PATHEXT || '.COM;.EXE;.BAT;.CMD').split(';').filter(Boolean);
+  const names = path.extname(command) ? [command] : extensions.map((ext) => command + ext);
   for (const folder of folders) {
     for (const name of names) {
       const file = path.join(folder, name);
@@ -44,18 +46,20 @@ export function startCommand(command, args, options) {
   return spawn(quoteForWindows(file), args.map(quoteForWindows), { ...options, shell: true, windowsHide: true });
 }
 
+const hasEnded = (child) => child.exitCode !== null || child.signalCode !== null;
+
 /**
  * Stops the process and everything it started. On Windows, child.kill() would end only the direct child, e.g.
  * cmd.exe for a batch file or the node wrapper of a CLI, and leave the real program running, so the whole
  * tree is ended with taskkill.
  */
 export function stopProcessTree(child) {
-  if (child.exitCode !== null || child.signalCode !== null) return;
+  if (hasEnded(child)) return;
   if (!IS_WINDOWS || !child.pid) {
     child.kill();
     return;
   }
-  const taskkill = spawn(path.join(WINDOWS_TOOLS_DIR, 'taskkill.exe'), ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true });
+  const taskkill = spawn(windowsTool('taskkill.exe'), ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true });
   // taskkill missing or refused: ending at least the direct child is the best that is left.
   taskkill.on('error', () => child.kill());
   taskkill.on('close', (code) => {
@@ -65,11 +69,11 @@ export function stopProcessTree(child) {
 
 /** Like stopProcessTree, but finished when it returns, for when the app is ending and nothing asynchronous runs any more. */
 export function stopProcessTreeNow(child) {
-  if (child.exitCode !== null || child.signalCode !== null) return;
+  if (hasEnded(child)) return;
   if (!IS_WINDOWS || !child.pid) {
     child.kill();
     return;
   }
-  const taskkill = spawnSync(path.join(WINDOWS_TOOLS_DIR, 'taskkill.exe'), ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true, timeout: STOP_NOW_TIMEOUT_MS });
+  const taskkill = spawnSync(windowsTool('taskkill.exe'), ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true, timeout: STOP_NOW_TIMEOUT_MS });
   if (taskkill.status !== 0) child.kill();
 }

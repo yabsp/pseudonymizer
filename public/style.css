@@ -77,6 +77,8 @@ code { font-family: var(--mono); font-size: 0.9em; }
 }
 .tabs [role=tab]:hover { color: var(--ink); filter: none; }
 .tabs [role=tab][aria-selected=true] { color: var(--ink); border-bottom-color: var(--accent); }
+/* How many documents are in the list, next to the tab name. */
+.count { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: 0.75rem; font-weight: 600; font-variant-numeric: tabular-nums; }
 .dot { display: inline-block; width: 7px; height: 7px; margin-left: 5px; border-radius: 50%; background: var(--error); vertical-align: 2px; }
 
 .theme-toggle {
@@ -143,9 +145,6 @@ input, select, textarea {
 input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 input[type=checkbox] { width: auto; margin: 0; flex: none; accent-color: var(--accent); }
 textarea { font-family: var(--mono); font-size: 13px; line-height: 1.6; resize: vertical; }
-.inline { display: flex; gap: 8px; margin-top: 5px; }
-.inline select { margin: 0; flex: 1; min-width: 0; }
-.inline button { flex: none; }
 .src { font-family: var(--mono); font-size: 12px; font-weight: 400; }
 
 button {
@@ -174,6 +173,7 @@ p.status:empty { display: none; }
 
 .notice { margin-top: 14px; padding: 12px 14px; background: var(--warn-bg); border: 1px solid var(--warn-line); border-radius: var(--radius-small); }
 .notice p { margin: 0; }
+.notice .notice-more { margin-top: 6px; color: var(--muted); font-size: 0.88rem; }
 .notice .actions { margin-top: 10px; }
 
 /* Step 1: text and file drop */
@@ -202,21 +202,17 @@ p.status:empty { display: none; }
 .document-card details.more { margin-top: 10px; }
 
 /* Documents tab: one row per document, in the order they were added */
-.job-list { list-style: none; margin: 0 0 12px; padding: 0; min-height: 120px; border: 1px dashed var(--line); border-radius: var(--radius-small); }
-.job-list:empty { display: grid; place-items: center; }
-.job-list:empty::before { content: attr(data-empty); color: var(--muted); font-size: 0.9rem; padding: 16px; text-align: center; }
-.job { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 14px; border-bottom: 1px solid var(--line); }
-.job:last-child { border-bottom: 0; }
-.job[draggable="true"] { cursor: grab; background: var(--panel); }
-.job.dragging { opacity: 0.4; }
-.job.drop-before { box-shadow: inset 0 2px 0 var(--accent); }
-.job.drop-after { box-shadow: inset 0 -2px 0 var(--accent); }
-.job-text { flex: 1 1 220px; min-width: 0; }
-.job-name { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
-.job-state { margin: 0; color: var(--muted); font-size: 0.86rem; }
-.job-state.error { color: var(--error); }
-.job-actions { display: flex; gap: 8px; }
-.job[data-state="running"] .num { background: var(--accent); color: var(--accent-ink); }
+.document-list { list-style: none; margin: 0 0 12px; padding: 0; min-height: 120px; border: 1px dashed var(--line); border-radius: var(--radius-small); }
+.document-list:empty { display: grid; place-items: center; }
+.document-list:empty::before { content: attr(data-empty); color: var(--muted); font-size: 0.9rem; padding: 16px; text-align: center; }
+.document-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+.document-row:last-child { border-bottom: 0; }
+.document-row-text { flex: 1 1 220px; min-width: 0; }
+.document-row-name { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+.document-row-state { margin: 0; color: var(--muted); font-size: 0.86rem; }
+.document-row-state.error { color: var(--error); }
+.document-row-actions { display: flex; gap: 8px; }
+.document-row[data-state="reading"] .num, .document-row[data-state="detecting"] .num { background: var(--accent); color: var(--accent-ink); }
 
 /* Step 2: summary, preview and value list */
 .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; padding: 0; list-style: none; }
@@ -246,6 +242,10 @@ details.more > summary::-webkit-details-marker { display: none; }
 details.more > summary::before { content: "›"; display: inline-block; transition: transform 0.15s; font-size: 1.1em; }
 details.more[open] > summary::before { transform: rotate(90deg); }
 details.more[open] > summary { margin-bottom: 12px; }
+/* A whole card that folds, with its heading as the handle (Settings > Advanced). */
+details.more.plain { margin-top: 0; padding-top: 0; border-top: 0; }
+details.more.plain > summary { color: var(--ink); }
+details.more.plain > summary h2 { display: inline; margin: 0; }
 
 .table-wrap { max-height: 340px; overflow: auto; border: 1px solid var(--line); border-radius: var(--radius-small); }
 table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
@@ -280,13 +280,6 @@ td.del button { padding: 2px 9px; }
 .part-note { margin: 6px 0 0; color: var(--muted); font-size: 0.82rem; }
 .message-part textarea { margin-top: 0; }
 .hint.after { margin: 12px 0 0; }
-
-/* Settings: this computer's hardware */
-.hardware-info { font-size: 0.86rem; color: var(--muted); }
-.hardware-info p { margin: 0 0 6px; overflow-wrap: anywhere; }
-.hardware-list { margin: 8px 0 0; padding-left: 18px; }
-.hardware-list li { margin-bottom: 4px; }
-.hardware-list li.usable strong { color: var(--ink); }
 
 /* Outputs */
 .output {

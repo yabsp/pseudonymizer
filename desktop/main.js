@@ -1,45 +1,52 @@
-// The desktop app: starts the unchanged local server inside Electron and shows the page in a locked-down window.
-// Everything stays on this machine: the server listens on 127.0.0.1 only, the models ship with the app and are
-// loaded offline, and the window can't open other sites.
-import { app, BrowserWindow, dialog, Menu, session, shell } from 'electron';
-import { execFileSync } from 'node:child_process';
-import crypto from 'node:crypto';
+// The desktop app: the local server (server/) inside Electron, and its page in a window of its own. Nothing leaves
+// this computer: the server listens on 127.0.0.1 only, the model ships with the app, and the window loads nothing
+// but the app's own page (any other request is cancelled before it starts).
+import { app, BrowserWindow, dialog, Menu, session } from 'electron';
+import { spawn } from 'node:child_process';
 import net from 'node:net';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { readConfig, ROOT } from '../server/config.js';
+import { createApp } from '../server/index.js';
 
-const DESKTOP_DIR = path.dirname(fileURLToPath(import.meta.url));
-// A fixed port, so the page keeps its origin and with it the theme choice between runs; another free port is
-// used if it is taken.
+// A fixed port keeps the page's origin, and with it what the page remembers (theme, settings copy), between runs;
+// another free port is used if it is taken.
 const PREFERRED_PORT = 47291;
-const APP_ID = 'app.pseudonymizer.desktop';
+const ICON = path.join(ROOT, 'desktop', 'icons', 'icon.png');
 const SHELL_PATH_TIMEOUT_MS = 5000;
 // The search path a terminal would print: the login shell's PATH between two markers, so greetings or other
 // output from shell start-up files are ignored. [\s\S]*? matches everything between the markers, also line breaks.
 const MARKED_PATH = /__PATH__([\s\S]*?)__PATH__/;
-// The folders where the AI tools are usually installed, in case the login shell can't be asked.
+// Where the AI tools are usually installed, in case the login shell can't be asked.
 const TOOL_FOLDERS = ['.local/bin', '.npm-global/bin', '.volta/bin', '.bun/bin'];
-// What the page may load: this app's server and a local Ollama (the Ollama detector is called from the page),
-// i.e. http on localhost or 127.0.0.1 with any port; and data: or blob: URLs the page creates itself (downloads
-// of the mapping table). Everything else, such as a spell-check dictionary from Google, is blocked.
-const LOCAL_URL = /^(?:http:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?\/|data:|blob:|devtools:)/;
+// Not a server: a spell-check dictionary download (Chromium starts one from Google otherwise) fails at once.
+const NO_DOWNLOADS = 'http://127.0.0.1:9/';
+
+/** What the login shell prints for its PATH, or '' if it can't be asked in time. */
+function askLoginShell() {
+  return new Promise((resolve) => {
+    // A session of its own: an interactive shell started from a terminal in the background would otherwise stop
+    // its whole process group, this app included, to wait for the terminal.
+    const shell = spawn(process.env.SHELL || '/bin/sh', ['-ilc', 'printf "__PATH__%s__PATH__" "$PATH"'], { detached: true, stdio: ['ignore', 'pipe', 'ignore'] });
+    let output = '';
+    const timer = setTimeout(() => shell.kill('SIGKILL'), SHELL_PATH_TIMEOUT_MS);
+    shell.stdout.on('data', (data) => (output += data));
+    shell.on('error', () => resolve(''));
+    shell.on('close', () => {
+      clearTimeout(timer);
+      resolve(output);
+    });
+  });
+}
 
 /**
- * Apps started from the desktop get a minimal PATH, without ~/.local/bin (Claude Code) or nvm's folder (Codex,
- * Gemini CLI). The login shell knows the real one, so it is asked once at start.
+ * Apps started from the desktop get a minimal PATH on macOS and Linux, without ~/.local/bin (Claude Code) or nvm's
+ * folder (Codex, Gemini CLI). The login shell knows the real one, so it is asked once.
  */
-function useTerminalSearchPath() {
+async function useTerminalSearchPath() {
   if (process.platform === 'win32') return;
-  const home = app.getPath('home');
-  const extra = TOOL_FOLDERS.map((folder) => path.join(home, folder));
-  try {
-    const shell = process.env.SHELL || '/bin/sh';
-    const output = execFileSync(shell, ['-ilc', 'printf "__PATH__%s__PATH__" "$PATH"'], { encoding: 'utf8', timeout: SHELL_PATH_TIMEOUT_MS, stdio: ['ignore', 'pipe', 'ignore'] });
-    const shellPath = output.match(MARKED_PATH)?.[1];
-    if (shellPath) extra.unshift(...shellPath.split(path.delimiter));
-  } catch {
-    // the shell could not be asked in time; the usual install folders below still apply
-  }
+  const extra = TOOL_FOLDERS.map((folder) => path.join(app.getPath('home'), folder));
+  const shellPath = MARKED_PATH.exec(await askLoginShell())?.[1];
+  if (shellPath) extra.unshift(...shellPath.split(path.delimiter));
   process.env.PATH = [...new Set([...extra, ...(process.env.PATH || '').split(path.delimiter)])].filter(Boolean).join(path.delimiter);
 }
 
@@ -51,140 +58,104 @@ function isPortFree(port) {
   });
 }
 
-async function choosePort() {
-  if (await isPortFree(PREFERRED_PORT)) return PREFERRED_PORT;
-  const probe = net.createServer();
-  await new Promise((resolve) => probe.listen(0, '127.0.0.1', resolve));
-  const { port } = probe.address();
-  await new Promise((resolve) => probe.close(resolve));
-  return port;
+/**
+ * The server's settings. Installed, what the user changes is kept in the system's place for app data (on Windows
+ * %APPDATA%\Pseudonymizer) and the model is in the app's resources; started from the project folder ("npm start")
+ * both are the project's, as with "npm run server". PSEUDONYMIZER_DATA_DIR and PSEUDONYMIZER_MODEL_DIR still win.
+ */
+async function serverConfig() {
+  const env = { ...process.env, PORT: String((await isPortFree(PREFERRED_PORT)) ? PREFERRED_PORT : 0) };
+  if (app.isPackaged) {
+    env.PSEUDONYMIZER_DATA_DIR ||= app.getPath('userData');
+    env.PSEUDONYMIZER_MODEL_DIR ||= path.join(process.resourcesPath, 'models', 'gliner');
+  }
+  return readConfig(env);
 }
 
-/** In the installed app the helper and the models are next to the program, in its resources folder. */
-function configureServer(port) {
-  process.env.PORT = String(port);
-  process.env.PSEUDONYMIZER_DATA_DIR = app.getPath('userData');
-  process.env.PSEUDONYMIZER_APP = 'desktop';
-  process.env.PSEUDONYMIZER_API_TOKEN = apiToken;
-  if (!app.isPackaged) return;
-  const helperName = process.platform === 'win32' ? 'detection-helper.exe' : 'detection-helper';
-  process.env.DETECTION_HELPER = path.join(process.resourcesPath, 'helper', 'detection-helper', helperName);
-  process.env.HF_HOME = path.join(process.resourcesPath, 'models');
-  process.env.DOCLING_ARTIFACTS_PATH = path.join(process.resourcesPath, 'models', 'docling');
-  // Never contact Hugging Face: the models are bundled, and checking for updates would reveal app use.
-  process.env.HF_HUB_OFFLINE = '1';
-  process.env.TRANSFORMERS_OFFLINE = '1';
-  process.env.HF_HUB_DISABLE_TELEMETRY = '1';
-  // ONNX Runtime reports to Microsoft on import otherwise; python/accelerators.py forces it too.
-  process.env.ORT_DISABLE_TELEMETRY = '1';
-}
-
-// Not a valid host, so a dictionary download fails right away instead of reaching Google.
-const NO_DICTIONARY_DOWNLOADS = 'http://127.0.0.1:9/';
-
-/** Runs first, before anything can load: the app never needs the internet. */
-function blockInternet() {
-  // Chromium's spell checker downloads dictionaries from Google as soon as the app starts.
-  session.defaultSession.setSpellCheckerEnabled(false);
-  session.defaultSession.setSpellCheckerDictionaryDownloadURL(NO_DICTIONARY_DOWNLOADS);
-  session.defaultSession.webRequest.onBeforeRequest((details, callback) => callback({ cancel: !LOCAL_URL.test(details.url) }));
-  // Only for this app's own page: notifications (the page shows no content in them, see
-  // public/js/ui/notifications.js) and writing to the clipboard (the Copy buttons, after a click). Not reading the
-  // clipboard (pasting with Ctrl+V needs no permission), no camera, microphone, location or anything else.
-  const ALLOWED_PERMISSIONS = ['notifications', 'clipboard-sanitized-write'];
-  const isAllowed = (permission, url) => ALLOWED_PERMISSIONS.includes(permission) && LOCAL_URL.test(url || '');
-  session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback, details) => callback(isAllowed(permission, details.requestingUrl)));
-  session.defaultSession.setPermissionCheckHandler((_webContents, permission, requestingOrigin) => isAllowed(permission, requestingOrigin + '/'));
-}
-
-// A new secret on every start; only this app's window sends it, added here so the page itself never sees it.
-const apiToken = crypto.randomBytes(32).toString('hex');
-
-function sendApiToken(origin) {
-  session.defaultSession.webRequest.onBeforeSendHeaders({ urls: [`${origin}/api/*`] }, (details, callback) => {
-    callback({ requestHeaders: { ...details.requestHeaders, 'X-Pseudonymizer-Token': apiToken } });
-  });
-}
-
-function lockWindows(origin) {
+/** Runs before the page loads: the window may reach its own server and nothing else, and ask for no permission but copying. */
+function allowOnly(origin) {
+  const isOwn = (url = '') => url.startsWith(origin + '/') || url.startsWith(`blob:${origin}/`) || url.startsWith('data:') || url.startsWith('devtools:');
+  const own = session.defaultSession;
+  own.setSpellCheckerEnabled(false);
+  own.setSpellCheckerDictionaryDownloadURL(NO_DOWNLOADS);
+  own.webRequest.onBeforeRequest((details, callback) => callback({ cancel: !isOwn(details.url) }));
+  const isAllowed = (permission, url) => permission === 'clipboard-sanitized-write' && isOwn(url);
+  own.setPermissionRequestHandler((_contents, permission, callback, details) => callback(isAllowed(permission, details.requestingUrl)));
+  own.setPermissionCheckHandler((_contents, permission, requestingOrigin) => isAllowed(permission, requestingOrigin + '/'));
   app.on('web-contents-created', (_event, contents) => {
     contents.on('will-navigate', (event, url) => {
-      if (!url.startsWith(origin + '/')) event.preventDefault();
+      if (!url.startsWith(origin + '/')) event.preventDefault(); // also a file dropped next to the drop zone
     });
     contents.setWindowOpenHandler(() => ({ action: 'deny' }));
+    contents.on('will-attach-webview', (event) => event.preventDefault());
   });
 }
 
 function openWindow(origin) {
   const window = new BrowserWindow({
     width: 1100,
-    height: 860,
+    height: 900,
     minWidth: 380,
     minHeight: 500,
     title: 'Pseudonymizer',
-    icon: path.join(DESKTOP_DIR, 'icons', 'icon.png'),
+    icon: ICON,
     autoHideMenuBar: true,
     show: false,
     webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: false },
   });
   window.once('ready-to-show', () => window.show());
-  void window.loadURL(origin + '/'); // load failures show in the window itself
+  void window.loadURL(origin + '/'); // a failure to load shows in the window itself
   return window;
 }
 
-/**
- * Windows shows notifications only for an app id that a Start menu entry carries. The app ships as a folder
- * without an installer (ADR 0008), so it adds that entry itself, for this user only, and points it at the folder
- * it now runs from (it may have been moved). Not being able to is not fatal: only notifications are missing.
- */
-function addStartMenuEntry() {
-  const link = path.join(app.getPath('appData'), 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Pseudonymizer.lnk');
-  const entry = { target: process.execPath, appUserModelId: APP_ID, description: 'Pseudonymizer' };
-  let current = null;
-  try {
-    current = shell.readShortcutLink(link);
-  } catch {
-    // no entry yet; it is created below
-  }
-  if (current?.target === entry.target && current?.appUserModelId === APP_ID) return;
-  // 'replace' only overwrites an existing entry, 'create' only makes a new one.
-  if (!shell.writeShortcutLink(link, current ? 'replace' : 'create', entry)) console.error('The Start menu entry could not be written, so notifications may not show.');
-}
+// The macOS menu bar carries the shortcuts for copy and paste; elsewhere the window needs no menu.
+const MENU = process.platform === 'darwin' ? Menu.buildFromTemplate([{ role: 'appMenu' }, { role: 'editMenu' }, { role: 'windowMenu' }]) : null;
+
+// server === null: not started (yet); otherwise the running server (createApp in server/index.js).
+let server = null;
 
 async function start() {
-  blockInternet();
-  // Started from the project folder, only Electron's own path is known to Windows as an app id.
-  if (process.platform === 'win32') app.setAppUserModelId(app.isPackaged ? APP_ID : process.execPath);
-  if (process.platform === 'win32' && app.isPackaged) addStartMenuEntry();
-  useTerminalSearchPath();
-  const port = await choosePort();
-  configureServer(port);
-  const { listening, stopAllWork } = await import('../server/index.js');
-  // Before Electron ends the process, so a document being read does not stay in the temporary folder.
-  app.on('will-quit', stopAllWork);
-  // server/config.js has read it; the helpers and AI tools the server starts don't inherit it.
-  delete process.env.PSEUDONYMIZER_API_TOKEN;
-  await listening;
-  const origin = `http://127.0.0.1:${port}`;
-  lockWindows(origin);
-  sendApiToken(origin);
-  Menu.setApplicationMenu(null);
-  let window = openWindow(origin);
+  await useTerminalSearchPath();
+  server = createApp(await serverConfig());
+  // However the process ends, no AI tool it started keeps running.
+  process.on('exit', server.stopNow);
+  const origin = `http://127.0.0.1:${await server.listen()}`;
+  // The only line the app writes: where it runs (also what tests read).
+  console.log(`Pseudonymizer running at ${origin}`);
+  allowOnly(origin);
+  Menu.setApplicationMenu(MENU);
+  const window = openWindow(origin);
   app.on('second-instance', () => {
     if (window.isMinimized()) window.restore();
     window.focus();
   });
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) window = openWindow(origin);
-  });
+}
+
+// Started from the project folder, the browser data (cache, what the page remembers) stays in it too.
+if (!app.isPackaged) app.setPath('userData', process.env.PSEUDONYMIZER_DATA_DIR || path.join(ROOT, '.cache', 'desktop'));
+else if (process.env.PSEUDONYMIZER_DATA_DIR) app.setPath('userData', process.env.PSEUDONYMIZER_DATA_DIR);
+
+// The one way the app ends: running AI tools are stopped and the model is released, then the process exits. A model
+// that is still loading can't be interrupted, so the wait is limited.
+const END_WAIT_MS = 10000;
+let ending = null;
+function end() {
+  ending ??= Promise.race([server?.close().catch(() => {}), new Promise((resolve) => setTimeout(resolve, END_WAIT_MS))]).finally(() => app.exit(0));
 }
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  app.on('window-all-closed', () => app.quit());
+  app.on('window-all-closed', end);
+  // Quit from the menu (macOS) or by Electron itself.
+  app.on('will-quit', (event) => {
+    event.preventDefault();
+    end();
+  });
+  // Ended by the system: logging out, shutting down, "kill".
+  for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(signal, end);
   app.whenReady().then(start).catch((e) => {
     dialog.showErrorBox('Pseudonymizer could not start', e.message);
-    app.quit();
+    app.exit(1);
   });
 }

@@ -1,5 +1,5 @@
 import { isOnlyCommonWords } from './common-words.js';
-import { isDiagnosisCode } from './patterns.js';
+import { hasShapeOf, isDiagnosisCode, isLegalReference } from './patterns.js';
 
 // A placeholder as the app writes it: "[[", upper-case letters, digits or "_", "]]" (e.g. [[PERSON_1]]).
 export const PLACEHOLDER = /\[\[[A-Z0-9_]+\]\]/;
@@ -25,6 +25,10 @@ export const normalizeText = (text) => text.normalize('NFC').replace(INVISIBLE, 
 // Short values only match as a whole word, so "ich" never matches inside "wichtige". Longer values match
 // anywhere, so a name stays hidden in "Ammanns" or "AcmeBillingService".
 const SHORT_VALUE_LENGTH = 5;
+// A single word of lower-case letters ("parent", "keller"): an ordinary word more often than a name, so it also
+// only matches as a whole word and "parentale" or "Weinkeller" stay readable.
+const LOWER_CASE_WORD = /^\p{Ll}+$/u;
+const isWholeWordValue = (value) => [...value].length < SHORT_VALUE_LENGTH || LOWER_CASE_WORD.test(value);
 
 // Word boundaries for short values (u flag; \p{L} letter, \p{Lu} upper-case, \p{Ll} lower-case,
 // \p{Lt} title-case, \p{Lo} letter without case, \p{N} digit):
@@ -73,7 +77,7 @@ export function valuePattern(original) {
   const value = normalizeText(original).trim();
   const escaped = charactersPattern(value, HAS_WHITESPACE.test(value));
   const chars = [...value];
-  if (chars.length >= SHORT_VALUE_LENGTH) return escaped;
+  if (!isWholeWordValue(value)) return escaped;
   const [first, last] = [chars[0], chars.at(-1)];
   let before = '';
   if (LETTER_OR_DIGIT.test(first)) before = UPPER_CASE.test(first) ? NOT_AFTER_UPPER_OR_DIGIT : NOT_AFTER_LETTER_OR_DIGIT;
@@ -279,9 +283,26 @@ function addRelatedValues(mapping, sourceText, commonWords) {
 // an optional V and up to three I; the lookahead (?=.) makes sure it is not empty.
 const ROMAN_NUMERAL = /^(?=.)X{0,3}(?:IX|IV|V?I{0,3})$/;
 
-function addDetectedValue(mapping, { text, category }, sourceText, commonWords) {
+// The categories whose values the patterns know by their form.
+const FORMAL_CATEGORIES = new Set(['ID', 'IP', 'EMAIL', 'URL', 'PHONE', 'CARD', 'DATE', 'TIMESTAMP', 'MAC']);
+const MOST_OF_A_VALUE = 0.6;
+
+/**
+ * The category of a value a model found: the model's, unless most of the value is one a pattern already found.
+ * "AHV 756.1234.5678.97" is an ID whatever the model calls it, so the AI model doesn't read an IP address there.
+ */
+function categoryOfDetected(mapping, value, category) {
+  const inner = mapping.find((m) => m.original.length >= MOST_OF_A_VALUE * value.length && value.includes(m.original)
+    && FORMAL_CATEGORIES.has(categoryOfName(nameOf(m.placeholder))));
+  return inner ? categoryOfName(nameOf(inner.placeholder)) : category;
+}
+
+function addDetectedValue(mapping, detected, sourceText, commonWords) {
+  const { text } = detected;
   const value = text.trim();
-  if (isOnlyCommonWords(text, commonWords) || isDiagnosisCode(value) || ROMAN_NUMERAL.test(value)) return mapping;
+  if (isOnlyCommonWords(text, commonWords) || isDiagnosisCode(value) || ROMAN_NUMERAL.test(value) || isLegalReference(value)) return mapping;
+  const category = categoryOfDetected(mapping, value, detected.category);
+  if (!hasShapeOf(category, value)) return mapping;
   const samePerson = category === 'PERSON' && sourceText.includes(value) && !mapping.some((m) => m.original === value)
     ? placeholderOfSamePerson(mapping, value, commonWords)
     : null;
@@ -316,7 +337,8 @@ const LINE_BREAK = /\s*\n\s*/;
 const splitAtLineBreaks = (entities) => entities.flatMap((entity) => entity.text.split(LINE_BREAK).map((text) => ({ ...entity, text })));
 
 /**
- * Values made only of common words, diagnosis codes and Roman numerals are dropped; values across lines are
+ * Values made only of common words, diagnosis codes, Roman numerals and references to laws are dropped, as are
+ * values that can't be what the model calls them (an e-mail address without "@"); values across lines are
  * split into lines; a shorter form of a person ("Mr. Chen", "Jonathan Reyes" next to "Jonathan Andrew Reyes")
  * shares the placeholder of the longer one, whichever the detector lists first.
  */
@@ -347,7 +369,7 @@ export function pseudonymize(mapping, original) {
   if (MARKER.test(text)) throw new Error('The text contains private-use characters (U+F0000 and above) that the app uses internally; remove them first.');
 
   const withMarkers = entries.map((entry, i) => ({ entry, marker: String.fromCodePoint(MARKER_BASE + i) }));
-  const isShort = ({ entry }) => [...entry.original].length < SHORT_VALUE_LENGTH;
+  const isShort = ({ entry }) => isWholeWordValue(normalizeText(entry.original).trim());
   const replaceWithMarkers = (input, list) => {
     if (!list.length) return input;
     // One group per value, so a match in another case or across lines still tells which value it is.

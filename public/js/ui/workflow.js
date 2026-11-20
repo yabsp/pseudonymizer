@@ -1,27 +1,23 @@
 import { addEntry, parseMapping, pseudonymize, restore } from '../core/mapping.js';
 import { buildPrompt, findMappedValues, whySendIsBlocked } from '../core/prompt.js';
-import { findSensitiveValues } from '../detection/find-values.js';
-import { DETECTORS } from '../detection/index.js';
+import { findSensitiveValues } from '../detection.js';
+import { acceptedExtensions, importDocument } from '../import/index.js';
 import { callCli } from '../targets/cli.js';
 import { isAbort, whileBusy } from './busy.js';
-import { markDetectorReady } from './detector-settings.js';
-import { fingerprintOf } from '../import/fingerprint.js';
-import { acceptedExtensions, importDocument } from '../import/index.js';
-import { convertedCopy } from './documents.js';
 import { $, setStatus } from './dom.js';
 import { downloadFile, downloadJson } from './files.js';
-import { notify } from './notifications.js';
 import { getPrompts } from './prompts-panel.js';
 import { renderMappingTable, renderPreview, renderSnippet, renderSummary } from './render.js';
+import { activeOcrLanguages, markModelReady } from './settings-panel.js';
 import { readSettings } from './settings-store.js';
 import { showTab } from './tabs.js';
 
 // textAtLastDetection === null: not detected yet, so steps 2 and 3 stay hidden and Send is locked.
-// detectionProblem === null: the last detection read the whole text; otherwise 'incomplete' or 'listLoaded', which
-// lock sending until detection runs again (whySendIsBlocked).
+// detectionProblem === null: the values belong to the text as detected; 'listLoaded': a saved list replaced them,
+// which locks sending until detection runs again (whySendIsBlocked).
 // source === null: the text was typed or pasted; otherwise { name, format } of the opened file.
-// document === null: the text box is the text; otherwise a PDF sent as an attachment, { file, markdown, pages,
-// images, formulas, formulasConverted, tables, device, deviceNote? }; file stays in this page only, for converting formulas later.
+// document === null: the text box is the text; otherwise a PDF sent as an attachment: { text, pages, images,
+// scannedPages, recognizedPages, unreadPages }.
 // selected === null: no placeholder chosen in the preview; otherwise the placeholder shown in valueInfo.
 const state = {
   mapping: [],
@@ -33,62 +29,43 @@ const state = {
   selected: null,
 };
 
-const sourceText = () => state.document?.markdown ?? $('input').value;
-
 const CONFIRM_CLEAR_MS = 4000;
 
+const sourceText = () => state.document?.text ?? $('input').value;
 const currentPrompt = () => buildPrompt(state.pseudoText, $('extraPrompt').value, { isDocument: state.document !== null });
 
-function showNoModelNotice() {
-  const patterns = $('useRegex').checked;
-  $('noModelText').textContent = patterns
-    ? 'Without a local model, only emails, URLs, IP addresses, phone numbers, IDs and street addresses are found. Names, companies and secrets are not.'
-    : 'Choose a local model in Settings, or turn on pattern detection there.';
-  $('patternsOnlyBtn').hidden = !patterns;
-  $('noModelNotice').hidden = false;
-  setStatus('detectStatus', '');
-}
-
-async function detect(patternsOnly = false) {
+async function detect({ patternsOnly = false } = {}) {
   const text = sourceText();
   if (!text.trim()) return setStatus('detectStatus', 'Paste some text or open a document first.', true);
-  const settings = readSettings();
-  const detector = DETECTORS[settings.detector];
-  if (!detector) return setStatus('detectStatus', 'Choose a detector under Settings > Detection.', true);
-  const useModel = !patternsOnly && detector.isConfigured(settings);
-  if (!useModel && !patternsOnly) return showNoModelNotice();
-  $('noModelNotice').hidden = true;
-
+  $('modelNotice').hidden = true;
   try {
-    const options = { detector: useModel ? detector : null, settings, prompts: getPrompts() };
-    const found = useModel
-      ? await whileBusy('Detecting sensitive values', (signal, progress) => findSensitiveValues(text, state.mapping, { ...options, signal, progress }))
-      : await findSensitiveValues(text, state.mapping, options);
-    if (useModel) {
-      markDetectorReady(settings.detector);
-      notify('Sensitive values found. Check them before sending.');
-    }
+    const options = { settings: readSettings(), prompts: getPrompts(), patternsOnly };
+    const found = patternsOnly
+      ? await findSensitiveValues(text, state.mapping, options)
+      : await whileBusy('Finding sensitive values', (signal, progress) => {
+        progress('On this computer. Longer documents take a little longer.');
+        return findSensitiveValues(text, state.mapping, { ...options, signal });
+      });
+    if (found.usedModel) markModelReady(found.model);
     showFound(found);
   } catch (e) {
-    setStatus('detectStatus', isAbort(e)
-      ? 'Detection cancelled. Nothing was changed.'
-      : 'Detection failed: ' + e.message + detector.failureHint, !isAbort(e));
+    if (isAbort(e)) return setStatus('detectStatus', 'Cancelled. Nothing was changed.');
+    // Never silently with less protection: the user sees why and decides.
+    $('modelNoticeText').textContent = e.message;
+    $('modelNotice').hidden = false;
+    setStatus('detectStatus', '');
   }
 }
 
 /** Shows the result of findSensitiveValues in step 2, for the text now in step 1. */
-function showFound({ mapping, failed, parts, note, usedModel }) {
+function showFound({ mapping, usedModel }) {
   state.mapping = mapping;
   state.textAtLastDetection = sourceText();
-  state.detectionProblem = failed ? 'incomplete' : null;
+  state.detectionProblem = null;
   showValue(null);
   refresh();
   $('reviewCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
-  if (failed) {
-    setStatus('detectStatus', `The local model returned unusable output for ${failed} of ${parts} part(s), so values are probably missing. Sending stays locked: run detection again or choose another model.`, true);
-  } else {
-    setStatus('detectStatus', `${mapping.length} values to hide${usedModel ? '' : ' (patterns only)'}. Check them in step 2. ${note}`.trim());
-  }
+  setStatus('detectStatus', `${mapping.length} values to hide${usedModel ? '' : ' (found without the detection model: names and companies are missing)'}. Check them in step 2.`, !usedModel);
 }
 
 function warnAboutMappedValuesInExtraText() {
@@ -101,7 +78,6 @@ function warnAboutMappedValuesInExtraText() {
 const SEND_HINTS = {
   notDetected: 'Run detection in step 1 first.',
   textChanged: 'Your text changed since detection, so new values would not be hidden. Press "Find sensitive values" again in step 1 before sending.',
-  incomplete: 'Parts of your text could not be checked, so values are probably missing. Press "Find sensitive values" again in step 1 before sending.',
   listLoaded: 'A saved list replaced the values found. Press "Find sensitive values" again in step 1 before sending, so values missing from the list are found too.',
 };
 
@@ -127,17 +103,18 @@ async function send() {
   const prompt = currentPrompt();
   if (!prompt) return setStatus('sendStatus', 'Nothing to send yet.', true);
   try {
+    const system = getPrompts().system;
     $('response').value = await whileBusy('Waiting for ' + $('targetName').textContent, (signal, progress) => {
-      progress('Only the prompt shown in step 3 was sent.');
+      progress('Only the message shown in step 3 was sent.');
       const { cliAdapter, model } = readSettings();
-      return callCli({ prompt, system: getPrompts().system, cliAdapter, model: model.trim() }, signal);
+      return callCli({ prompt, system, cliAdapter, model: model.trim() }, signal);
     });
     setStatus('sendStatus', 'Answer received.');
     reassemble();
     updateSteps();
     $('answerCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
   } catch (e) {
-    setStatus('sendStatus', isAbort(e) ? 'Cancelled.' : 'Request failed: ' + e.message, !isAbort(e));
+    setStatus('sendStatus', isAbort(e) ? 'Cancelled.' : 'Sending failed: ' + e.message, !isAbort(e));
   }
   updateSendState();
 }
@@ -181,7 +158,7 @@ function updateSteps() {
 
 function showSource() {
   $('sourceInfo').hidden = !state.source || state.document !== null;
-  if (state.source) $('sourceInfo').textContent = `Opened from ${state.source.name}. Only text is read; the file itself is never sent.`;
+  if (state.source) $('sourceInfo').textContent = `Opened from ${state.source.name}. Only its text is read; the file itself is never sent.`;
 }
 
 const plural = (count, one, many) => `${count} ${count === 1 ? one : many}`;
@@ -192,21 +169,32 @@ function showDocument() {
   $('documentCard').hidden = doc === null;
   $('partOneTitle').textContent = doc ? 'Your document, with the highlighted values replaced' : 'Your text, with the highlighted values replaced';
   if (!doc) return;
-  const facts = [plural(doc.pages, 'page', 'pages'), doc.tables && plural(doc.tables, 'table', 'tables'),
-    doc.images && `${plural(doc.images, 'image', 'images')}, not sent`,
-    doc.formulas && (doc.formulasConverted ? `${plural(doc.formulas, 'formula', 'formulas')} as LaTeX` : `${plural(doc.formulas, 'formula', 'formulas')}, not converted`),
-    doc.device === 'cuda' && 'read with the graphics card', doc.deviceNote];
+  const facts = [plural(doc.pages, 'page', 'pages'), doc.images && `${plural(doc.images, 'image', 'images')}, not sent`,
+    doc.recognizedPages && `${plural(doc.recognizedPages, 'scanned page', 'scanned pages')} read from the picture`];
   $('documentName').textContent = state.source.name;
   $('documentFacts').textContent = facts.filter(Boolean).join(' · ');
-  const hasUnconverted = doc.formulas > 0 && !doc.formulasConverted;
-  $('formulaNotice').hidden = !hasUnconverted;
-  if (hasUnconverted) $('formulaText').textContent = `${plural(doc.formulas, 'formula is', 'formulas are')} marked but not sent. Converting them to LaTeX takes about 10 to 20 seconds each, less with a graphics card.`;
-  $('documentText').textContent = doc.markdown;
+  const unread = doc.unreadPages.length;
+  $('documentNotice').hidden = !unread;
+  if (unread) {
+    $('documentNotice').textContent = `${unread === 1 ? 'Page' : 'Pages'} ${doc.unreadPages.join(', ')} ${unread === 1 ? 'is a scanned image' : 'are scanned images'} and could not be read, so ${unread === 1 ? 'its' : 'their'} text is missing from what is sent.`
+      + ' Turn on reading scanned pages in Settings and open the file again.';
+  }
+  $('documentText').textContent = doc.text;
+}
+
+/** An answer belongs to the text it was asked about: restored with another text's values it would get wrong names. */
+function clearAnswer() {
+  $('response').value = '';
+  $('final').textContent = '';
+  setStatus('reassembleStatus', '');
+  setStatus('sendStatus', '');
+  delete $('answerCard').dataset.opened;
 }
 
 function removeDocument() {
   state.document = null;
   state.source = null;
+  clearAnswer();
   showDocument();
   showSource();
   setStatus('detectStatus', 'Document removed.');
@@ -216,7 +204,7 @@ function removeDocument() {
 function saveAsFile() {
   if (isBlocked()) return;
   // A neutral file name: the original one often contains a name ("Befund_Hans_Muster.pdf").
-  downloadFile(state.document ? 'pseudonymized-document' : 'pseudonymized-text', 'md', state.pseudoText, 'text/markdown');
+  downloadFile(state.document ? 'pseudonymized-document' : 'pseudonymized-text', 'txt', state.pseudoText, 'text/plain');
   setStatus('sendStatus', 'Saved part 1 to your download folder. After uploading it to a chat, paste the answer under "Already have an answer" to restore the names.');
 }
 
@@ -239,10 +227,11 @@ export function refresh() {
   updateSteps();
 }
 
-function putIntoStepOne({ text, document, source }, file, fingerprint = null) {
+function putIntoStepOne({ text, document, source }) {
+  clearAnswer();
   state.source = source;
   if (document) {
-    state.document = { file, fingerprint, markdown: text, ...document };
+    state.document = { text, ...document };
   } else {
     state.document = null;
     $('input').value = text;
@@ -251,49 +240,28 @@ function putIntoStepOne({ text, document, source }, file, fingerprint = null) {
   showSource();
 }
 
-async function openDocument(file, { formulas = false } = {}) {
-  const title = formulas ? 'Converting formulas' : 'Opening ' + file.name;
+async function openDocument(file) {
   try {
-    // The same file is not converted twice: not when it is open already, nor when the Documents list has it.
-    const fingerprint = await fingerprintOf(file);
-    const open = state.document;
-    if (open?.fingerprint === fingerprint && (open.formulasConverted || !formulas)) {
-      return setStatus('detectStatus', 'This document is already open.');
-    }
-    const copy = await convertedCopy(fingerprint, formulas);
-    if (copy) {
-      openConverted(copy.imported, file, copy.found, fingerprint);
-      return setStatus('detectStatus', copy.found
-        ? `Taken from the Documents list, with its ${copy.found.mapping.length} values to hide. Check them in step 2.`
-        : 'Taken from the Documents list. Find the sensitive values next.');
-    }
-    const { accelerator } = readSettings();
-    putIntoStepOne(await whileBusy(title, (signal, progress) => importDocument(file, { signal, progress, formulas, accelerator })), file, fingerprint);
-    const done = formulas ? 'Formulas converted.' : 'Document opened.';
+    const imported = await whileBusy('Opening ' + file.name, (signal, progress) => importDocument(file, { signal, progress, ocrLanguages: activeOcrLanguages() }));
+    putIntoStepOne(imported);
     setStatus('detectStatus', state.textAtLastDetection === null || !state.mapping.length
-      ? `${done} Find the sensitive values next.`
-      : `${done} Find the sensitive values again, so values in the new text are found too.`);
+      ? 'Document opened. Find the sensitive values next.'
+      : 'Document opened. Find the sensitive values again, so values in the new text are found too.');
     refresh();
   } catch (e) {
-    const cancelled = formulas ? 'Converting cancelled. Nothing was changed.' : 'Opening cancelled. Nothing was changed.';
-    setStatus('detectStatus', isAbort(e) ? cancelled : e.message, !isAbort(e));
+    setStatus('detectStatus', isAbort(e) ? 'Opening cancelled. Nothing was changed.' : e.message, !isAbort(e));
   }
 }
 
 /**
- * Opens a document from the Documents tab in step 1: imported as importDocument returns it, file the original
- * (kept in this page for converting formulas later). found (from findSensitiveValues, with a fresh mapping)
- * replaces the values of the previous text and goes straight to step 2; without it, detection comes next.
+ * Opens a document from the Documents tab in step 1: imported as importDocument returns it, found as
+ * findSensitiveValues returns it for that text (with a fresh mapping). The values of the previous text are replaced
+ * and step 2 shows the new ones; sending stays the user's step.
  */
-export function openConverted(imported, file, found = null, fingerprint = null) {
+export function openConverted(imported, found) {
   showTab('work');
-  putIntoStepOne(imported, file, fingerprint);
-  if (found) return showFound(found);
-  state.mapping = [];
-  state.textAtLastDetection = null;
-  setStatus('detectStatus', 'Document opened. Find the sensitive values next.');
-  refresh();
-  $('textCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  putIntoStepOne(imported);
+  showFound(found);
 }
 
 function initDropZone() {
@@ -361,19 +329,14 @@ export function initWorkflow() {
   });
   initDropZone();
   $('detectBtn').addEventListener('click', () => void detect());
-  $('patternsOnlyBtn').addEventListener('click', () => void detect(true));
-  $('chooseModelBtn').addEventListener('click', () => {
-    $('noModelNotice').hidden = true;
-    showTab('settings');
-    $('detector').focus();
-  });
+  $('retryDetectBtn').addEventListener('click', () => void detect());
+  $('patternsOnlyBtn').addEventListener('click', () => void detect({ patternsOnly: true }));
   $('input').addEventListener('input', () => {
     updatePreview();
     updateSendState();
   });
 
   $('removeDocumentBtn').addEventListener('click', removeDocument);
-  $('convertFormulasBtn').addEventListener('click', () => void openDocument(state.document.file, { formulas: true }));
   $('saveFileBtn').addEventListener('click', saveAsFile);
   $('keepVisibleBtn').addEventListener('click', keepSelectedVisible);
   $('closeValueInfoBtn').addEventListener('click', () => showValue(null));

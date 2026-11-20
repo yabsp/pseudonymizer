@@ -3,10 +3,10 @@
 # Detectors sometimes report pronouns, titles or generic words as values, e.g. "ich", "Sie",
 # "meiner Person" or "neue Adresse". A detected value made only of these words (plus lower-case
 # words such as "bitte") is ignored. A value that also contains a name is kept: "Frau Bachmann" stays.
-# Words you add to the mapping table yourself are never filtered.
+# Values you add yourself under "Edit values" are never filtered.
 #
-# To change the list, copy this file to not-sensitive.txt in the same folder and edit the copy;
-# not-sensitive.txt always wins. Lines starting with # are comments.
+# Change the list under Settings > Advanced; "Save" keeps your version as not-sensitive.txt and
+# this file stays as shipped. Lines starting with # are comments.
 
 # German pronouns
 ich

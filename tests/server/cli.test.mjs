@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { after, before, describe, it } from 'node:test';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { ADAPTERS_FILE, FIXTURES, startServer } from '../helpers/server.mjs';
+import { FIXTURES, startServer } from '../helpers/server.mjs';
 
 const FAKE_CLI = path.join(FIXTURES, 'fake-cli.mjs');
 const ADAPTERS = {
@@ -32,24 +32,27 @@ function writeBatchShim(dir) {
   return shim;
 }
 
-describe('CLI bridge', () => {
+describe('AI tools (CLI bridge)', () => {
   let server;
   let pidFile;
   before(async () => {
     pidFile = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'pseudo-pid-')), 'cli.json');
+    // The stand-in tool is started by the server in this process and inherits this.
+    process.env.FAKE_CLI_PID_FILE = pidFile;
     const adapters = IS_WINDOWS
       ? { ...ADAPTERS, shim: { ...ADAPTERS.fake, command: writeBatchShim(path.dirname(pidFile)), args: [...ADAPTERS.fake.args.slice(1), SPACED_ARG] } }
       : ADAPTERS;
-    server = await startServer({ adapters, env: { FAKE_CLI_PID_FILE: pidFile } });
+    server = await startServer({ adapters });
   });
   after(async () => {
     await server.close();
+    delete process.env.FAKE_CLI_PID_FILE;
     fs.rmSync(path.dirname(pidFile), { recursive: true, force: true });
   });
 
-  it('lists the configured adapters with their models for the settings page', async () => {
-    const res = await server.api('GET', '/api/adapters');
-    assert.deepEqual(res.json().filter((a) => a.id !== 'shim'), [
+  it('lists the configured tools with their models for the settings page', async () => {
+    const { adapters } = (await server.api('GET', '/api/about')).json();
+    assert.deepEqual(adapters.filter((a) => a.id !== 'shim'), [
       { id: 'fake', label: 'Fake CLI (test login)', models: [{ id: '', label: 'Default' }, { id: 'fake-large', label: 'Fake Large' }] },
       { id: 'missing', label: 'Not installed', models: [] },
     ]);
@@ -63,7 +66,7 @@ describe('CLI bridge', () => {
     const seen = JSON.parse(res.json().text);
     assert.equal(seen.stdin, `${system}\n---\n${prompt}`);
     assert.equal(seen.system, system);
-    assert.deepEqual(seen.args.slice(0, 3), [ '--model', 'claude-opus-5-5', '--system-file']);
+    assert.deepEqual(seen.args.slice(0, 3), ['--model', 'claude-opus-5-5', '--system-file']);
 
     const noModel = JSON.parse((await server.api('POST', '/api/cli/fake', { prompt: 'hi', system: '' })).json().text);
     assert.ok(!noModel.args.includes('--model'));
@@ -81,6 +84,22 @@ describe('CLI bridge', () => {
   it('fills each field of the input only once, so instructions can name "{prompt}" without repeating it', async () => {
     const res = await server.api('POST', '/api/cli/fake', { prompt: '[[PERSON_1]] {system}', system: 'Answer {prompt}.' });
     assert.equal(JSON.parse(res.json().text).stdin, 'Answer {prompt}.\n---\n[[PERSON_1]] {system}');
+  });
+
+  it('keeps characters whole that arrive in two pieces (regression: "Grüsse" came back as "Gr��sse")', async () => {
+    const res = await server.api('POST', '/api/cli/fake', { prompt: 'MODE:split', system: '' });
+    assert.equal(res.status, 200, res.body);
+    assert.equal(res.json().text, 'Freundliche Grüsse, Zoë 🍀');
+  });
+
+  it('refuses a request without a prompt instead of sending "undefined" to the tool (regression)', async () => {
+    for (const body of [{}, { prompt: '' }, { prompt: '   ' }, { prompt: 42 }, { prompt: ['a'] }, { prompt: 'p', system: 7 }, { prompt: 'p', model: 9 }]) {
+      const res = await server.api('POST', '/api/cli/fake', body);
+      assert.equal(res.status, 400, JSON.stringify(body));
+      assert.ok(res.json().error);
+    }
+    const broken = await server.request({ method: 'POST', path: '/api/cli/fake', body: '{"prompt": ', headers: { Origin: server.origin, 'Content-Type': 'application/json' } });
+    assert.equal(broken.status, 400);
   });
 
   it('runs every request in a fresh, empty folder that is deleted afterwards', async () => {
@@ -108,7 +127,7 @@ describe('CLI bridge', () => {
     assert.equal(ok.status, 200);
   });
 
-  it('reports a failing CLI with its error message', async () => {
+  it('reports a failing tool with its error message', async () => {
     const res = await server.api('POST', '/api/cli/fake', { prompt: 'MODE:fail', system: '' });
     assert.equal(res.status, 502);
     assert.match(res.json().error, /exited with code 3.*usage limit reached/s);
@@ -126,15 +145,16 @@ describe('CLI bridge', () => {
     assert.match(res.json().error, /No output/);
   });
 
-  it('explains a CLI that is not installed, and keeps running', async () => {
+  it('explains a tool that is not installed, and keeps running', async () => {
     const res = await server.api('POST', '/api/cli/missing', { prompt: 'p', system: '' });
     assert.equal(res.status, 502);
     assert.match(res.json().error, /Could not start.*installed/);
-    assert.ok(server.isRunning());
+    assert.equal((await server.api('GET', '/api/about')).status, 200);
   });
 
-  it('answers 404 for unknown adapters and refuses other websites', async () => {
+  it('answers 404 for unknown tools and refuses other websites', async () => {
     assert.equal((await server.api('POST', '/api/cli/nope', { prompt: 'p' })).status, 404);
+    assert.equal((await server.api('POST', '/api/cli/__proto__', { prompt: 'p' })).status, 404);
     assert.equal((await server.api('POST', '/api/cli/fake', { prompt: 'p' }, { Origin: 'https://attacker.example' })).status, 403);
   });
 
@@ -152,12 +172,12 @@ describe('CLI bridge', () => {
     controller.abort();
     await raw;
     for (let i = 0; i < 100 && isAlive(pid); i++) await sleep(50);
-    assert.ok(!isAlive(pid), 'CLI process stopped');
+    assert.ok(!isAlive(pid), 'tool process stopped');
     for (let i = 0; i < 100 && fs.existsSync(cwd); i++) await sleep(50);
     assert.ok(!fs.existsSync(cwd), 'working folder removed');
   }
 
-  it('stops the CLI and removes its folder when the app cancels the request', () => cancelSleepingCli('fake'));
+  it('stops the tool and removes its folder when the app cancels the request', () => cancelSleepingCli('fake'));
 
   it('stops the program behind a batch file on Windows, not only cmd.exe', { skip: !IS_WINDOWS && 'batch files are Windows only' }, () => cancelSleepingCli('shim'));
 
@@ -171,15 +191,36 @@ describe('CLI bridge', () => {
   });
 });
 
-describe('CLI bridge with a broken adapters.json', () => {
-  it('reports the broken file instead of crashing', async () => {
-    const server = await startServer({ files: { [ADAPTERS_FILE]: '{ "fake": ' } });
+describe('AI tools: stopping with the app, broken configuration', () => {
+  it('stops a running tool and removes its folder when the app closes', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pseudo-pid-'));
+    const pidFile = path.join(dir, 'cli.json');
+    process.env.FAKE_CLI_PID_FILE = pidFile;
+    const server = await startServer({ adapters: ADAPTERS });
     try {
-      const list = await server.api('GET', '/api/adapters');
-      assert.equal(list.status, 500);
-      assert.match(list.json().error, /adapters\.json is invalid/);
+      const raw = server.api('POST', '/api/cli/fake', { prompt: 'MODE:sleep', system: '' }).catch((e) => e);
+      for (let i = 0; i < 100 && !fs.existsSync(pidFile); i++) await sleep(50);
+      const { pid, cwd } = JSON.parse(fs.readFileSync(pidFile, 'utf8'));
+      assert.ok(isAlive(pid));
+      await server.close();
+      await raw;
+      for (let i = 0; i < 100 && isAlive(pid); i++) await sleep(50);
+      assert.ok(!isAlive(pid), 'tool process stopped');
+      assert.ok(!fs.existsSync(cwd), 'working folder removed');
+    } finally {
+      delete process.env.FAKE_CLI_PID_FILE;
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('reports a broken adapters.json instead of crashing', async () => {
+    const server = await startServer({ adapters: '{ "fake": ' });
+    try {
+      const about = await server.api('GET', '/api/about');
+      assert.equal(about.status, 500);
+      assert.match(about.json().error, /adapters\.json is invalid/);
       assert.equal((await server.api('POST', '/api/cli/fake', { prompt: 'p' })).status, 500);
-      assert.ok(server.isRunning());
+      assert.equal((await server.request({ path: '/' })).status, 200);
     } finally {
       await server.close();
     }

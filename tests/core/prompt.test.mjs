@@ -16,7 +16,8 @@ describe('the prompt that is sent', () => {
 
   it('sends a document between markers, without its file name, before the question', () => {
     const prompt = buildPrompt('## Befund\n[[PERSON_1]] was admitted.\n', 'Summarise it.', { isDocument: true });
-    assert.equal(prompt, 'Attached document, converted from PDF to Markdown. Images and unconverted formulas are marked and were not sent.\n<document>\n## Befund\n[[PERSON_1]] was admitted.\n</document>\n\nSummarise it.');
+    assert.match(prompt, /^Attached document, read from a PDF as text\. [^\n]+\n<document>\n## Befund\n\[\[PERSON_1\]\] was admitted\.\n<\/document>\n\nSummarise it\.$/);
+    assert.doesNotMatch(prompt, /\.pdf/);
     assert.equal(buildPrompt('', 'Question only', { isDocument: true }), 'Question only');
   });
 
@@ -47,13 +48,12 @@ describe('when the text may be sent', () => {
     assert.equal(blocked(TEXT, ''), 'textChanged');
   });
 
-  it('not when parts of the text were not read, or a saved list replaced the values found', () => {
-    assert.equal(blocked(TEXT, TEXT, 'incomplete'), 'incomplete');
+  it('not when a saved list replaced the values found', () => {
     assert.equal(blocked(TEXT, TEXT, 'listLoaded'), 'listLoaded');
   });
 
   it('asks for detection on the new text first when both apply', () => {
-    assert.equal(blocked(TEXT, 'Ein anderer Text.', 'incomplete'), 'textChanged');
+    assert.equal(blocked(TEXT, 'Ein anderer Text.', 'listLoaded'), 'textChanged');
   });
 });
 

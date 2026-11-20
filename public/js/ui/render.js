@@ -20,9 +20,15 @@ const KIND_NAMES = {
   SECRET: ['secret', 'secrets'],
   IP: ['IP address', 'IP addresses'],
   URL: ['link', 'links'],
+  LOCATION: ['place', 'places'],
+  USERNAME: ['user name', 'user names'],
+  HOST: ['computer name', 'computer names'],
+  PROJECT: ['project', 'projects'],
+  MAC: ['device address', 'device addresses'],
+  OTHER: ['other value', 'other values'],
 };
 
-export const categoryOf = (placeholder) => placeholder.match(PLACEHOLDER_CATEGORY)?.[1] ?? 'OTHER';
+const categoryOf = (placeholder) => placeholder.match(PLACEHOLDER_CATEGORY)?.[1] ?? 'OTHER';
 
 function describeKind(category, count) {
   const [one, many] = KIND_NAMES[category] ?? [category.toLowerCase().replaceAll('_', ' '), category.toLowerCase().replaceAll('_', ' ')];

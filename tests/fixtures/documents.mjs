@@ -8,8 +8,8 @@ const CSV_FIRST = ['James', 'Olivia', 'Liam', 'Emma', 'Noah', 'Ava', 'William', 
 const CSV_LAST = ['Smith', 'Johnson', 'Williams', 'Brown', 'Jones', 'Garcia', 'Miller', 'Davis', 'Rodriguez', 'Martinez'];
 const CSV_DEPARTMENTS = ['Engineering', 'Marketing', 'Sales', 'HR', 'Finance', 'IT', 'Customer Support'];
 const CSV_STATUS = ['Active', 'Active', 'On Leave', 'Active', 'Terminated'];
-export const CSV_PEOPLE = CSV_FIRST.flatMap((first) => CSV_LAST.map((last) => `${first},${last}`));
-export const CSV_EXPORT = ['id,first_name,last_name,email,department,status,join_date', ...CSV_PEOPLE.map((name, i) => {
+const CSV_PEOPLE = CSV_FIRST.flatMap((first) => CSV_LAST.map((last) => `${first},${last}`));
+const CSV_EXPORT = ['id,first_name,last_name,email,department,status,join_date', ...CSV_PEOPLE.map((name, i) => {
   const [first, last] = name.split(',');
   const date = `20${16 + (i % 8)}-${String(1 + (i % 12)).padStart(2, '0')}-${String(1 + (i % 28)).padStart(2, '0')}`;
   return `${i + 1},${name},${first.toLowerCase()}.${last.toLowerCase()}@example.com,${CSV_DEPARTMENTS[i % 7]},${CSV_STATUS[i % 5]},${date}`;
